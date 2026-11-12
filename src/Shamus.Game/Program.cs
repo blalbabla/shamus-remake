@@ -3,7 +3,7 @@ using Raylib_cs;
 using Shamus.Core.Mazes;
 
 // M0-M2 prototype: top-down 3D room viewer with a movable player. Controls: WASD/arrows move, [ ] switch room.
-var mazeName = args.Length > 0 ? args[0] : "atari";
+var mazeName = args.Length > 0 ? args[0] : "c64";
 int room = args.Length > 1 ? int.Parse(args[1]) : 0;
 var maze = MazeLoader.Load(Path.Combine(AppContext.BaseDirectory, "assets", "mazes", mazeName + ".maze"));
 

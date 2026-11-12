@@ -9,7 +9,7 @@ public sealed class RoomGrid
 {
     public const int W = 40, H = 22;
     // '#' grid geometry (cells)
-    public static readonly int[] VLineX = { 16, 24 };
+    public static readonly int[] VLineX = { 16, 23 };
     public static readonly int[] HLineY = { 7, 14 };
     public const int DoorY0 = 8, DoorY1 = 14; // door rows [8,14)
 
@@ -32,12 +32,12 @@ public sealed class RoomGrid
 
     private void BuildChamber(MazeData m, int room)
     {
-        // outer frame, with doors on left and right
-        Fill(0, 0, W, 1); Fill(0, H - 1, W, H);
-        Fill(0, 0, 1, H); Fill(W - 1, 0, W, H);
-        Fill(0, DoorY0, 1, DoorY1, false); Fill(W - 1, DoorY0, W, DoorY1, false);
-        int[] xs = { 1, 17, 25, W - 1 };      // horizontal pieces span: [1,16) [17,24)... via lines
-        int[][] hx = { new[] { 1, 17 }, new[] { 17, 24 }, new[] { 24, W - 1 } };
+        // Four solid "wallpaper" corner blocks; the middle band (rows [8,14)) is open to both screen edges.
+        const int L = 9, R = 32;
+        Fill(0, 0, L, DoorY0); Fill(R, 0, W, DoorY0);
+        Fill(0, DoorY1, L, H); Fill(R, DoorY1, W, H);
+        Fill(L, 0, R, 1); Fill(L, H - 1, R, H); // top / bottom walls of the central column
+        int[][] hx = { new[] { L, 16 }, new[] { 16, 24 }, new[] { 24, R } };
         int[][] vy = { new[] { 1, 8 }, new[] { 8, 15 }, new[] { 15, H - 1 } };
         for (int i = 0; i < 6; i++)
         {
