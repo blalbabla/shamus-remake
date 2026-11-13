@@ -194,6 +194,7 @@ public sealed class GameWorld
                                     ShotCooldown = 30 + _rng.Next(Config.EnemyShotCooldown) });
             var ne = Enemies[^1];
             if (ne.Kind == EnemyKind.SpiralDrone) ne.CanShoot = _rng.NextDouble() < Config.DroneShooterChance;
+            else if (ne.Kind == EnemyKind.SnapJumper) ne.CanShoot = false;   // jumpers never shoot
         }
         if (Enemies.Count == 0) RoomCleared = true;
     }
@@ -340,12 +341,12 @@ public sealed class GameWorld
                         {
                             if (!Move(e, e.DashX, e.DashY)) e.DashLeft = 0; else e.DashLeft--;
                         }
-                        else if (e.Timer % 32 == 0)
+                        else if (e.Timer % Config.SnapJumpInterval == 0)
                         {
                             Decide(e, dx, dy);
-                            float v = 0.5f * spd;                // fast, large jump (~4 cells)
+                            float v = Config.SnapJumpSpeed * spd;   // fast, short hop
                             e.DashX = e.JumpX * v; e.DashY = e.JumpY * v;
-                            e.DashLeft = 8;
+                            e.DashLeft = Config.SnapJumpTicks;
                         }
                         break;
                     }

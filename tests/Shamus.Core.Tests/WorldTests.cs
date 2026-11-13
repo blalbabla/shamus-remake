@@ -348,3 +348,24 @@ public class SpawnMixTests
         Assert.Contains(EnemyKind.SpiralDrone, seen);
     }
 }
+
+public class SnapJumperTests
+{
+    [Fact]
+    public void JumpersNeverShoot()
+    {
+        var d = new DirectoryInfo(AppContext.BaseDirectory);
+        while (!Directory.Exists(Path.Combine(d.FullName, "assets", "mazes"))) d = d.Parent!;
+        var m = MazeLoader.Load(Path.Combine(d.FullName, "assets", "mazes", "c64.maze"));
+        for (int seed = 1; seed <= 30; seed++)
+        {
+            var w = new GameWorld(m, new GameConfig { Seed = seed, GodMode = true }, 3);
+            foreach (var e in w.Enemies.Where(e => e.Kind != EnemyKind.SnapJumper).ToList()) w.Enemies.Remove(e);
+            for (int i = 0; i < 600; i++)
+            {
+                w.Tick(new InputState(0, 0, false));
+                Assert.DoesNotContain(w.Events, ev => ev.Kind == WorldEventKind.EnemyShot);
+            }
+        }
+    }
+}

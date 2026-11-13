@@ -30,6 +30,9 @@ public sealed class GameConfig
     public float CycleEnemySpeedBonus { get; init; } = 0.2f;
     public float EnemySpeedScale { get; init; } = 1f;
     public bool GodMode { get; init; }   // test aid: walls and enemies do not kill
+    public int SnapJumpInterval { get; init; } = 60;   // ticks between jumps
+    public float SnapJumpSpeed { get; init; } = 0.4f;  // cells per tick while jumping
+    public int SnapJumpTicks { get; init; } = 5;       // jump length in ticks (about 2 cells)
     public int Seed { get; init; } = 1;
     public float EnemyRadius { get; init; } = 0.5f;
     public float EnemyBulletSpeed { get; init; } = 0.28f;
