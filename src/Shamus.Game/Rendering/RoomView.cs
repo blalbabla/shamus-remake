@@ -16,7 +16,7 @@ public sealed class RoomView : IDisposable
         new(255, 70, 25, 255), new(70, 130, 255, 255), new(70, 255, 110, 255), new(255, 60, 70, 255),
     };
     private static readonly Color FloorColor = new(34, 36, 46, 255), ClosedColor = new(18, 18, 26, 255);
-    private static readonly Color PostBody = new(40, 66, 160, 255);
+    private static readonly Color PostBody = new(46, 88, 235, 255), PostTop = new(110, 160, 255, 255), PostEdge = new(20, 40, 130, 255);
 
     private const float Ox = -RoomGrid.W / 2f, Oz = -RoomGrid.H / 2f;
     private static Vector3 P(float x, float y, float h) => new(Ox + x, h, Oz + y);
@@ -42,11 +42,40 @@ public sealed class RoomView : IDisposable
         if (_titles.TryGetValue(room, out var t)) return t;
         var font = _fontLoaded ? _font : Raylib.GetFontDefault();
         var img = Raylib.ImageTextEx(font, $"ROOM {room}", 160, 4, Color.White);
+        Outline(ref img, Math.Max(5, img.Width / 70));
         t = Raylib.LoadTextureFromImage(img);
         Raylib.UnloadImage(img);
         Raylib.SetTextureFilter(t, TextureFilter.Bilinear);
         _titles[room] = t;
         return t;
+    }
+
+    /// <summary>Replaces the glyph fill by an outline of the given stroke width (pixels), in place.</summary>
+    private static unsafe void Outline(ref Image img, int stroke)
+    {
+        Raylib.ImageFormat(ref img, PixelFormat.UncompressedR8G8B8A8);
+        int w = img.Width, h = img.Height;
+        var px = (Color*)img.Data;
+        var mask = new bool[w * h];
+        for (int i = 0; i < mask.Length; i++) mask[i] = px[i].A > 128;
+        // erode with a square window (separable min), then outline = mask minus eroded mask
+        var tmp = new bool[w * h]; var eroded = new bool[w * h];
+        for (int y = 0; y < h; y++)
+            for (int x = 0; x < w; x++)
+            {
+                bool all = mask[y * w + x];
+                for (int k = -stroke; k <= stroke && all; k++) { int xx = x + k; if (xx < 0 || xx >= w || !mask[y * w + xx]) all = false; }
+                tmp[y * w + x] = all;
+            }
+        for (int y = 0; y < h; y++)
+            for (int x = 0; x < w; x++)
+            {
+                bool all = tmp[y * w + x];
+                for (int k = -stroke; k <= stroke && all; k++) { int yy = y + k; if (yy < 0 || yy >= h || !tmp[yy * w + x]) all = false; }
+                eroded[y * w + x] = all;
+            }
+        var line = new Color((byte)200, (byte)130, (byte)25, (byte)255);
+        for (int i = 0; i < mask.Length; i++) px[i] = mask[i] && !eroded[i] ? line : new Color((byte)0, (byte)0, (byte)0, (byte)0);
     }
 
     /// <summary>Opaque parts: floor, closed areas, title, generator posts and the beam cores.</summary>
@@ -73,8 +102,9 @@ public sealed class RoomView : IDisposable
         {
             var c = P(x, y, 0.8f);
             Raylib.DrawCube(c, 0.9f, 1.6f, 0.9f, PostBody);
-            Raylib.DrawCubeWires(c, 0.9f, 1.6f, 0.9f, new Color(15, 25, 70, 255));
-            Raylib.DrawCube(P(x, y, 1.65f), 0.55f, 0.12f, 0.55f, Brighten(neon, 0.6f + 0.4f * pulse));
+            Raylib.DrawCube(P(x, y, 1.62f), 0.9f, 0.04f, 0.9f, PostTop);                       // solid lighter top face
+            Raylib.DrawCubeWires(c, 0.9f, 1.6f, 0.9f, PostEdge);
+            Raylib.DrawCube(P(x, y, 1.68f), 0.4f, 0.1f, 0.4f, Brighten(neon, 0.75f + 0.25f * pulse));   // solid neon cap
         }
 
         int i = 0;
@@ -106,8 +136,6 @@ public sealed class RoomView : IDisposable
             foreach (float h in BeamHeights) Beam(s, h, 0.65f, glow, 1f);
             i++;
         }
-        foreach (var (x, y) in walls.Posts)
-            Raylib.DrawSphere(P(x, y, 1.75f), 0.55f, new Color(neon.R, neon.G, neon.B, (byte)60));
         Raylib.EndBlendMode();
         Rlgl.EnableDepthMask();
     }
@@ -131,12 +159,12 @@ public sealed class RoomView : IDisposable
     private void DrawTitle(int room)
     {
         var tex = Title(room);
-        float h = 3.2f, w = h * tex.Width / tex.Height;
-        if (w > 16f) { w = 16f; h = w * tex.Height / tex.Width; }
+        // must fit inside the central square of the '#' grid (x 16.5..23.5), clear of the walls
+        float w = 5.6f, h = w * tex.Height / tex.Width;
         float cx = Ox + RoomGrid.W / 2f, cz = Oz + RoomGrid.H / 2f, y = 0.04f;
         Rlgl.SetTexture(tex.Id);
         Rlgl.Begin(DrawMode.Quads);
-        Rlgl.Color4ub(255, 170, 25, 210);
+        Rlgl.Color4ub(255, 255, 255, 190);
         Rlgl.Normal3f(0, 1, 0);
         Rlgl.TexCoord2f(0, 0); Rlgl.Vertex3f(cx - w / 2, y, cz - h / 2);
         Rlgl.TexCoord2f(0, 1); Rlgl.Vertex3f(cx - w / 2, y, cz + h / 2);

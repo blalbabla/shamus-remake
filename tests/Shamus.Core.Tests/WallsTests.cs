@@ -78,7 +78,7 @@ public class WallsTests
         g.SetSolid(0, RoomGrid.DoorY0, 1, RoomGrid.DoorY1, true);   // what GameWorld does for room 0
         var w = g.Walls;
         Assert.Contains(w.Segments, s => s.X0 == 0.5f && s.X1 == 0.5f && s.Y0 <= 8.1f && s.Y1 >= 13.4f);   // the sealed door beam
-        Assert.Contains(w.Posts, p => MathF.Abs(p.X - 9f) < 0.01f && MathF.Abs(p.Y - 0.5f) < 0.01f);       // corner of the frame
+        Assert.Contains(w.Posts, p => MathF.Abs(p.X - 8.5f) < 0.01f && MathF.Abs(p.Y - 0.5f) < 0.01f);       // corner of the frame
         Assert.True(w.Posts.Count >= 10);
     }
 
@@ -88,10 +88,26 @@ public class WallsTests
         var m = MazeLoader.Load(Path.Combine(Assets, "c64.maze"));
         var w = RoomGrid.Build(m, 18).Walls;   // pod room: h = v = 0
         // top and bottom wall beams between x = 9 and x = 32
-        Assert.Contains(w.Segments, s => s.IsHorizontal && s.Y0 == 0.5f && s.X0 == 9f && s.X1 == 32f);
-        Assert.Contains(w.Segments, s => s.IsHorizontal && s.Y0 == 21.5f && s.X0 == 9f && s.X1 == 32f);
+        Assert.Contains(w.Segments, s => s.IsHorizontal && s.Y0 == 0.5f && s.X0 == 8.5f && s.X1 == 32.5f);
+        Assert.Contains(w.Segments, s => s.IsHorizontal && s.Y0 == 21.5f && s.X0 == 8.5f && s.X1 == 32.5f);
         // inner edges of the four corner blocks
-        Assert.Equal(4, w.Segments.Count(s => !s.IsHorizontal && (s.X0 == 9f || s.X0 == 32f)));
+        Assert.Equal(4, w.Segments.Count(s => !s.IsHorizontal && (s.X0 == 8.5f || s.X0 == 32.5f)));
+    }
+
+    [Fact]
+    public void EachCornerHasExactlyOneGenerator()
+    {
+        foreach (var m in AllMazes())
+            for (int r = 0; r < 128; r++)
+            {
+                var posts = RoomGrid.Build(m, r).Walls.Posts;
+                for (int i = 0; i < posts.Count; i++)
+                    for (int j = i + 1; j < posts.Count; j++)
+                    {
+                        float dx = posts[i].X - posts[j].X, dy = posts[i].Y - posts[j].Y;
+                        Assert.True(dx * dx + dy * dy >= 0.99f, $"room {r}: generators too close at ({posts[i].X},{posts[i].Y}) and ({posts[j].X},{posts[j].Y})");
+                    }
+            }
     }
 
     [Fact]
