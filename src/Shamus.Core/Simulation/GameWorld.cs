@@ -181,13 +181,19 @@ public sealed class GameWorld
         RoomCleared = false;
         if ((IsPodRoom && !PodOpen) || Room == MazeData.RoomCount - 1) { RoomCleared = true; return; }
         int level = Maze.Level(Room);
-        int count = Math.Min(2 + level + _rng.Next(0, 3), 7);
+        int lv = Math.Min(level, Config.EnemyCountMax.Length - 1);
+        int count = _rng.Next(Config.EnemyCountMin[Math.Min(lv, Config.EnemyCountMin.Length - 1)], Config.EnemyCountMax[lv] + 1);
         int guard = 0;
-        while (Enemies.Count < count && guard++ < 500)
+        float minDist = Config.MinSpawnDistance;
+        while (Enemies.Count < count && guard < 1500)
         {
+            guard++;
+            if (guard % 150 == 0) minDist = Math.Max(6f, minDist - 1.5f);   // crowded room: relax gradually, never below 6 cells
             float x = 1 + (float)_rng.NextDouble() * (RoomGrid.W - 2), y = 1 + (float)_rng.NextDouble() * (RoomGrid.H - 2);
             if (!OpenArea(x, y, 0.7f)) continue;
-            if (MathF.Abs(x - PlayerX) + MathF.Abs(y - PlayerY) < Config.MinSpawnDistance) continue;
+            float pdx = x - PlayerX, pdy = y - PlayerY;
+            if (pdx * pdx + pdy * pdy < minDist * minDist) continue;
+            if (Enemies.Any(o => (o.X - x) * (o.X - x) + (o.Y - y) * (o.Y - y) < 4f)) continue; // keep enemies apart
             // all three kinds from the start; jumpers are rarer on the first level
             int roll = _rng.Next(level == 0 ? 11 : 12);
             var kind = level == 0 ? (roll < 5 ? EnemyKind.RoboDroid : roll < 9 ? EnemyKind.SpiralDrone : EnemyKind.SnapJumper)

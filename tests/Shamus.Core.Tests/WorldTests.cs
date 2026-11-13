@@ -73,7 +73,7 @@ public class EnemyTests
     {
         var w = new GameWorld(Maze(), new GameConfig(), 0);
         Assert.NotEmpty(w.Enemies);
-        Assert.All(w.Enemies, e => Assert.True(Math.Abs(e.X - w.PlayerX) + Math.Abs(e.Y - w.PlayerY) >= 10));
+        Assert.All(w.Enemies, e => Assert.True(Math.Abs(e.X - w.PlayerX) + Math.Abs(e.Y - w.PlayerY) >= 6));
     }
 
     [Fact]
@@ -389,5 +389,53 @@ public class FriendlyFireTests
         Assert.False(victim.Alive);
         Assert.True(shooter.Alive || w.Enemies.Contains(shooter) == false); // shooter is not hit by its own bullet
         Assert.Equal(score, w.Score);
+    }
+}
+
+public class SpawnCountTests
+{
+    static MazeData Maze()
+    {
+        var d = new DirectoryInfo(AppContext.BaseDirectory);
+        while (!Directory.Exists(Path.Combine(d.FullName, "assets", "mazes"))) d = d.Parent!;
+        return MazeLoader.Load(Path.Combine(d.FullName, "assets", "mazes", "c64.maze"));
+    }
+
+    [Theory]
+    [InlineData(3, 1, 5)]      // level 1 chamber
+    [InlineData(40, 2, 7)]     // level 2 chamber (room 40 is in 38..66)
+    [InlineData(75, 3, 9)]     // level 3
+    [InlineData(100, 4, 11)]   // level 4
+    public void EnemyCountsFollowLevelRanges(int room, int min, int max)
+    {
+        var m = Maze();
+        if (m.IsCorridor(room) || m.IsPod(room)) room = Enumerable.Range(room, 20).First(r => !m.IsCorridor(r) && !m.IsPod(r) && m.Level(r) == m.Level(room));
+        int lo = int.MaxValue, hi = 0;
+        for (int seed = 1; seed <= 150; seed++)
+        {
+            var w = new GameWorld(m, new GameConfig { Seed = seed }, room);
+            lo = Math.Min(lo, w.Enemies.Count); hi = Math.Max(hi, w.Enemies.Count);
+        }
+        Assert.Equal(min, lo);
+        Assert.Equal(max, hi);
+    }
+
+    [Fact]
+    public void EnemiesSpawnFarFromTheHero()
+    {
+        var m = Maze();
+        int near = 0, total = 0;
+        for (int seed = 1; seed <= 100; seed++)
+        {
+            var w = new GameWorld(m, new GameConfig { Seed = seed }, 100);
+            foreach (var e in w.Enemies)
+            {
+                total++;
+                float dist = MathF.Sqrt((e.X - w.PlayerX) * (e.X - w.PlayerX) + (e.Y - w.PlayerY) * (e.Y - w.PlayerY));
+                Assert.True(dist >= 6f, $"enemy spawned {dist:F1} cells from the hero");
+                if (dist < 12f) near++;
+            }
+        }
+        Assert.True(near < total * 0.15, $"{near}/{total} enemies spawned within 12 cells");
     }
 }

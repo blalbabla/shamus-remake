@@ -38,7 +38,9 @@ public sealed class GameConfig
     public float EnemyBulletSpeed { get; init; } = 0.28f;
     public int EnemyShotCooldown { get; init; } = 90;
     public float ClearedSpeedBonus { get; init; } = 1.25f;
-    public int MinSpawnDistance { get; init; } = 10;
+    public int MinSpawnDistance { get; init; } = 14;    // cells from the hero (relaxed only if the room is too crowded)
+    public int[] EnemyCountMin { get; init; } = { 1, 2, 3, 4 };   // per level
+    public int[] EnemyCountMax { get; init; } = { 5, 7, 9, 11 };
 
     // Pod room: two vertical barriers, each with a moving slit; the target object sits in the middle.
     public float[] PodBarrierX0 { get; init; } = { 15.5f, 23.5f };
