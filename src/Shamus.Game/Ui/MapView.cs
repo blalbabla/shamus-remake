@@ -12,7 +12,7 @@ public static class MapView
     {
         Raylib.DrawRectangle(0, 0, screenW, screenH, new Color(10, 10, 16, 235));
         Hud.TextCentered("MAP", 14, 36, Color.Gold, screenW);
-        Hud.TextCentered("M / ESC close", screenH - 34, 20, Color.Gray, screenW);
+        Hud.TextCentered("M / ESC close      dark cells: unexplored exits", screenH - 34, 20, Color.Gray, screenW);
 
         int pw = (screenW - 60) / 2, ph = (screenH - 130) / 2;
         for (int li = 0; li < layout.Levels.Count && li < 4; li++)
@@ -20,6 +20,21 @@ public static class MapView
             int px = 20 + (li % 2) * (pw + 20), py = 64 + (li / 2) * (ph + 14);
             DrawPanel(layout.Levels[li], world, px, py, pw, ph);
         }
+    }
+
+    /// <summary>Rooms not yet entered that can be reached through an exit of a visited room.</summary>
+    private static HashSet<int> Frontier(GameWorld w)
+    {
+        var m = w.Maze;
+        var f = new HashSet<int>();
+        foreach (int r in w.Visited)
+        {
+            if (r < MazeData.RoomCount - 1 && m.OpenRight(r) && m.OpenLeft(r + 1)) f.Add(r + 1);
+            if (r > 0 && m.OpenLeft(r) && m.OpenRight(r - 1)) f.Add(r - 1);
+            if (m.IsCorridor(r) && !m.IsPod(r)) f.Add(m.VerticalLink(r));
+        }
+        f.ExceptWith(w.Visited);
+        return f;
     }
 
     private static void DrawPanel(LevelMap lv, GameWorld w, int px, int py, int pw, int ph)
@@ -33,6 +48,7 @@ public static class MapView
         int ch = Math.Min(34, (ph - top - 10) / Math.Max(1, lv.Height));
         int ox = px + (pw - cw * lv.Width) / 2, oy = py + top;
         var maze = w.Maze;
+        var frontier = Frontier(w);
 
         for (int y = 0; y < lv.Height; y++)
         {
@@ -43,7 +59,17 @@ public static class MapView
                 if (LevelMap.IsRoomToken(t))
                 {
                     int room = int.Parse(t);
-                    if (!w.Visited.Contains(room)) continue;
+                    if (!w.Visited.Contains(room))
+                    {
+                        // never entered, but reachable through an exit of a visited room: dim hint
+                        if (!frontier.Contains(room)) continue;
+                        Raylib.DrawRectangle(cx + 1, cy + 1, cw - 2, ch - 2, new Color(34, 34, 40, 255));
+                        Raylib.DrawRectangleLines(cx + 1, cy + 1, cw - 2, ch - 2, new Color(95, 95, 108, 255));
+                        int fs2 = Math.Max(10, ch - 14);
+                        int tw2 = Raylib.MeasureText(t, fs2);
+                        Raylib.DrawText(t, cx + (cw - tw2) / 2, cy + (ch - fs2) / 2, fs2, new Color(95, 95, 105, 255));
+                        continue;
+                    }
                     var bg = Color.Black;
                     var fg = new Color(200, 200, 200, 255);
                     var obj = maze.Object(room);

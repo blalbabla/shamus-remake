@@ -186,8 +186,11 @@ public sealed class GameWorld
             float x = 1 + (float)_rng.NextDouble() * (RoomGrid.W - 2), y = 1 + (float)_rng.NextDouble() * (RoomGrid.H - 2);
             if (!OpenArea(x, y, 0.7f)) continue;
             if (MathF.Abs(x - PlayerX) + MathF.Abs(y - PlayerY) < Config.MinSpawnDistance) continue;
-            int kinds = level == 0 ? 2 : 3;
-            Enemies.Add(new Enemy { Kind = (EnemyKind)_rng.Next(kinds), X = x, Y = y, Phase = (float)_rng.NextDouble() * 6.28f,
+            // all three kinds from the start; jumpers are rarer on the first level
+            int roll = _rng.Next(level == 0 ? 11 : 12);
+            var kind = level == 0 ? (roll < 5 ? EnemyKind.RoboDroid : roll < 9 ? EnemyKind.SpiralDrone : EnemyKind.SnapJumper)
+                                  : (roll < 4 ? EnemyKind.RoboDroid : roll < 8 ? EnemyKind.SpiralDrone : EnemyKind.SnapJumper);
+            Enemies.Add(new Enemy { Kind = kind, X = x, Y = y, Phase = (float)_rng.NextDouble() * 6.28f,
                                     ShotCooldown = 30 + _rng.Next(Config.EnemyShotCooldown) });
             var ne = Enemies[^1];
             if (ne.Kind == EnemyKind.SpiralDrone) ne.CanShoot = _rng.NextDouble() < Config.DroneShooterChance;

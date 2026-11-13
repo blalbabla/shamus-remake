@@ -328,3 +328,23 @@ public class PodRegressionTests
         Assert.Null(w.Obj);
     }
 }
+
+public class SpawnMixTests
+{
+    [Fact]
+    public void AllEnemyKindsAppearFromTheFirstLevel()
+    {
+        var d = new DirectoryInfo(AppContext.BaseDirectory);
+        while (!Directory.Exists(Path.Combine(d.FullName, "assets", "mazes"))) d = d.Parent!;
+        var m = MazeLoader.Load(Path.Combine(d.FullName, "assets", "mazes", "c64.maze"));
+        var seen = new HashSet<EnemyKind>();
+        for (int seed = 1; seed <= 40; seed++)
+        {
+            var w = new GameWorld(m, new GameConfig { Seed = seed }, 3); // level 1 chamber
+            foreach (var e in w.Enemies) seen.Add(e.Kind);
+        }
+        Assert.Contains(EnemyKind.SnapJumper, seen);
+        Assert.Contains(EnemyKind.RoboDroid, seen);
+        Assert.Contains(EnemyKind.SpiralDrone, seen);
+    }
+}
