@@ -7,6 +7,8 @@ public enum GamePhase { Playing, Dying, GameOver, Won }
 public sealed class Bullet
 {
     public float X, Y, DX, DY;
+    public Enemy? Owner;   // enemy that fired it (enemy bullets only)
+    public int Age;
 }
 
 /// <summary>Deterministic fixed-step simulation of one maze. Renderers read state; the only outbound channel is <see cref="Events"/>.</summary>
@@ -256,14 +258,14 @@ public sealed class GameWorld
         UpdatePickup();
         UpdateBullets();
         UpdateEnemies();
-        if (Phase == GamePhase.Playing) UpdateEnemyBullets();
+        if (Phase == GamePhase.Playing) { UpdateEnemyBullets(); CheckCleared(); }
         if (Phase == GamePhase.Playing) UpdateShadow();
     }
 
-    private void KillEnemy(Enemy e)
+    private void KillEnemy(Enemy e, bool award = true)
     {
         e.Alive = false;
-        Score += e.Kind switch { EnemyKind.RoboDroid => 50, EnemyKind.SpiralDrone => 100, _ => 150 };
+        if (award) Score += e.Kind switch { EnemyKind.RoboDroid => 50, EnemyKind.SpiralDrone => 100, _ => 150 };
         Events.Add(new WorldEvent(WorldEventKind.EnemyKilled, e.X, e.Y, (int)e.Kind));
     }
 
@@ -363,13 +365,13 @@ public sealed class GameWorld
                     // suppressive fire: a fan of three shots toward the player's side of the room
                     float ang = MathF.Atan2(dy, dx);
                     for (int k = -1; k <= 1; k++)
-                        EnemyBullets.Add(new Bullet { X = e.X, Y = e.Y, DX = MathF.Cos(ang + k * 0.35f) * v, DY = MathF.Sin(ang + k * 0.35f) * v });
+                        EnemyBullets.Add(new Bullet { Owner = e, X = e.X, Y = e.Y, DX = MathF.Cos(ang + k * 0.35f) * v, DY = MathF.Sin(ang + k * 0.35f) * v });
                     e.ShotCooldown = Config.EnemyShotCooldown + 30;
                     Events.Add(new WorldEvent(WorldEventKind.EnemyShot, e.X, e.Y, (int)e.Kind));
                 }
                 else if (aligned)
                 {
-                    EnemyBullets.Add(new Bullet { X = e.X, Y = e.Y, DX = MathF.Abs(dx) < 1f ? 0 : MathF.Sign(dx) * v, DY = MathF.Abs(dx) < 1f ? MathF.Sign(dy) * v : 0 });
+                    EnemyBullets.Add(new Bullet { Owner = e, X = e.X, Y = e.Y, DX = MathF.Abs(dx) < 1f ? 0 : MathF.Sign(dx) * v, DY = MathF.Abs(dx) < 1f ? MathF.Sign(dy) * v : 0 });
                     e.ShotCooldown = e.Kind == EnemyKind.SnapJumper ? Config.EnemyShotCooldown * 2 : Config.EnemyShotCooldown;
                     Events.Add(new WorldEvent(WorldEventKind.EnemyShot, e.X, e.Y, (int)e.Kind));
                 }
@@ -379,6 +381,11 @@ public sealed class GameWorld
             float rr = Config.EnemyRadius + Config.PlayerRadius;
             if (dist < rr) { KillEnemy(e); Die(); break; }
         }
+        CheckCleared();
+    }
+
+    private void CheckCleared()
+    {
         Enemies.RemoveAll(e => !e.Alive);
         if (!RoomCleared && Enemies.Count == 0) { RoomCleared = true; Events.Add(new WorldEvent(WorldEventKind.RoomCleared)); }
     }
@@ -388,7 +395,16 @@ public sealed class GameWorld
         for (int i = EnemyBullets.Count - 1; i >= 0; i--)
         {
             var b = EnemyBullets[i];
-            b.X += b.DX; b.Y += b.DY;
+            b.X += b.DX; b.Y += b.DY; b.Age++;
+            // friendly fire: a bullet kills any other enemy that steps into it (no points for the player)
+            bool hitEnemy = false;
+            foreach (var e in Enemies)
+            {
+                if (!e.Alive || (e == b.Owner && b.Age < 12)) continue;
+                float ex = e.X - b.X, ey = e.Y - b.Y;
+                if (ex * ex + ey * ey < 0.55f * 0.55f) { KillEnemy(e, award: false); hitEnemy = true; break; }
+            }
+            if (hitEnemy) { EnemyBullets.RemoveAt(i); continue; }
             int cx = (int)MathF.Floor(b.X), cy = (int)MathF.Floor(b.Y);
             bool dead = b.X < 0 || b.X >= RoomGrid.W || b.Y < 0 || b.Y >= RoomGrid.H || Grid.IsSolid(cx, cy);
             float px = b.X - PlayerX, py = b.Y - PlayerY;
