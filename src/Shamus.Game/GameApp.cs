@@ -192,7 +192,7 @@ public sealed class GameApp
         if (Raylib.IsKeyPressed(KeyboardKey.F2)) { _settings.Muted = !_settings.Muted; ApplyAudioSettings(); _settings.Save(); }
         _hud.Update(dt);
         _scene.Rig.Update(dt);
-        if (_state is AppState.Playing or AppState.Title && Raylib.IsKeyPressed(KeyboardKey.V))
+        if (Raylib.IsKeyPressed(KeyboardKey.V))   // works in every state, including pause and map
         {
             _scene.Rig.Toggle(); _settings.View = _scene.Rig.Mode; _settings.Save();
         }
