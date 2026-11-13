@@ -100,12 +100,35 @@ while (!Raylib.WindowShouldClose())
         Raylib.DrawCube(pc + new Vector3(world.FaceX * 0.5f, 0.2f, world.FaceY * 0.5f), 0.25f, 0.25f, 0.25f, Color.Red);
     }
 
+    double now = Raylib.GetTime();
+    foreach (var e in world.Enemies)
+    {
+        var c = P(e.X, e.Y, 0.8f);
+        switch (e.Kind)
+        {
+            case EnemyKind.RoboDroid:
+                Raylib.DrawCube(c, 0.9f, 1.2f, 0.9f, Color.Gray);
+                Raylib.DrawCube(c + new Vector3(0, 0.8f, 0), 0.6f, 0.4f, 0.6f, Color.DarkBlue);
+                Raylib.DrawCube(c + new Vector3(0, 0.85f, 0.31f), 0.4f, 0.12f, 0.05f, Color.Red);
+                break;
+            case EnemyKind.SpiralDrone:
+                Raylib.DrawSphere(c, 0.5f, Color.Magenta);
+                Raylib.DrawCube(c, 1.3f, 0.1f, 0.1f, Color.Purple);
+                break;
+            default:
+                float hop = MathF.Abs(MathF.Sin((float)now * 6f + e.Phase)) * 0.4f;
+                Raylib.DrawCube(c + new Vector3(0, hop - 0.2f, 0), 0.8f, 0.7f, 0.8f, Color.Green);
+                break;
+        }
+    }
+    foreach (var b in world.EnemyBullets)
+        Raylib.DrawSphere(P(b.X, b.Y, 0.9f), 0.2f, Color.Orange);
     foreach (var b in world.Bullets)
         Raylib.DrawSphere(P(b.X, b.Y, 0.9f), 0.22f, Color.SkyBlue);
 
     Raylib.EndMode3D();
     Raylib.DrawText($"{maze.Name}  room {world.Room}  level {maze.Level(world.Room) + 1}  {maze.Kind(world.Room)}", 12, 10, 24, Color.White);
-    Raylib.DrawText($"lives {world.Lives}" + (world.Phase == GamePhase.GameOver ? "   GAME OVER (R)" : ""), 12, 40, 24, Color.Yellow);
+    Raylib.DrawText($"lives {world.Lives}   score {world.Score}   enemies {world.Enemies.Count}" + (world.Phase == GamePhase.GameOver ? "   GAME OVER (R)" : ""), 12, 40, 24, Color.Yellow);
     Raylib.DrawText("WASD move   Space fire   [ ] room   R restart", 12, 72, 18, Color.Gray);
     Raylib.EndDrawing();
 }

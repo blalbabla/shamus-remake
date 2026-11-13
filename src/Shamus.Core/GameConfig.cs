@@ -12,6 +12,13 @@ public sealed class GameConfig
     public bool WallsKill { get; init; } = true;   // original: electrified walls
     public int DeathTicks { get; init; } = 60;
 
+    public int Seed { get; init; } = 1;
+    public float EnemyRadius { get; init; } = 0.5f;
+    public float EnemyBulletSpeed { get; init; } = 0.28f;
+    public int EnemyShotCooldown { get; init; } = 90;
+    public float ClearedSpeedBonus { get; init; } = 1.25f;
+    public int MinSpawnDistance { get; init; } = 10;
+
     // Pod room: two vertical barriers, each with a moving slit; the target object sits in the middle.
     public float[] PodBarrierX0 { get; init; } = { 15.5f, 23.5f };
     public float PodBarrierWidth { get; init; } = 2f;

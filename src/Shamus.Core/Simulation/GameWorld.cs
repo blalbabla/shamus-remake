@@ -27,6 +27,11 @@ public sealed class GameWorld
     public List<Bullet> Bullets { get; } = new();
     public List<WorldEvent> Events { get; } = new();
     public long TickCount { get; private set; }
+    public List<Enemy> Enemies { get; } = new();
+    public List<Bullet> EnemyBullets { get; } = new();
+    public int Score { get; private set; }
+    public bool RoomCleared { get; private set; }
+    private readonly Random _rng;
 
     // pod state
     public bool IsPodRoom { get; private set; }
@@ -40,6 +45,7 @@ public sealed class GameWorld
     public GameWorld(MazeData maze, GameConfig config, int startRoom = 0)
     {
         Maze = maze; Config = config; Lives = config.StartLives;
+        _rng = new Random(config.Seed);
         EnterRoom(startRoom, 1.5f, 11f);
     }
 
@@ -57,6 +63,35 @@ public sealed class GameWorld
         SlitY[0] = 4f; _slitDir[0] = 1;
         SlitY[1] = 14f; _slitDir[1] = -1;
         Events.Add(new WorldEvent(WorldEventKind.RoomEntered, x, y, Room));
+        SpawnEnemies();
+    }
+
+    private bool OpenArea(float x, float y, float r)
+    {
+        for (int sx = -1; sx <= 1; sx += 2)
+            for (int sy = -1; sy <= 1; sy += 2)
+                if (Grid.IsSolid((int)MathF.Floor(x + sx * r), (int)MathF.Floor(y + sy * r))) return false;
+        return true;
+    }
+
+    private void SpawnEnemies()
+    {
+        Enemies.Clear(); EnemyBullets.Clear();
+        RoomCleared = false;
+        if (IsPodRoom || Room == 127) { RoomCleared = true; return; }
+        int level = Maze.Level(Room);
+        int count = Math.Min(2 + level + _rng.Next(0, 3), 7);
+        int guard = 0;
+        while (Enemies.Count < count && guard++ < 500)
+        {
+            float x = 1 + (float)_rng.NextDouble() * (RoomGrid.W - 2), y = 1 + (float)_rng.NextDouble() * (RoomGrid.H - 2);
+            if (!OpenArea(x, y, 0.7f)) continue;
+            if (MathF.Abs(x - PlayerX) + MathF.Abs(y - PlayerY) < Config.MinSpawnDistance) continue;
+            int kinds = level == 0 ? 2 : 3;
+            Enemies.Add(new Enemy { Kind = (EnemyKind)_rng.Next(kinds), X = x, Y = y, Phase = (float)_rng.NextDouble() * 6.28f,
+                                    ShotCooldown = 30 + _rng.Next(Config.EnemyShotCooldown) });
+        }
+        if (Enemies.Count == 0) RoomCleared = true;
     }
 
     /// <summary>Is point inside a closed pod barrier (not in its slit)?</summary>
@@ -99,7 +134,7 @@ public sealed class GameWorld
                 Phase = GamePhase.Playing;
                 PlayerX = PrevPlayerX = _entryX;
                 PlayerY = PrevPlayerY = _entryY;
-                Bullets.Clear();
+                Bullets.Clear(); EnemyBullets.Clear();
             }
             return;
         }
@@ -111,6 +146,92 @@ public sealed class GameWorld
         if (_cooldown > 0) _cooldown--;
         if (input.Fire && _cooldown == 0 && Bullets.Count < Config.MaxBullets) Fire();
         UpdateBullets();
+        UpdateEnemies();
+        if (Phase == GamePhase.Playing) UpdateEnemyBullets();
+    }
+
+    private void KillEnemy(Enemy e)
+    {
+        e.Alive = false;
+        Score += e.Kind switch { EnemyKind.RoboDroid => 50, EnemyKind.SpiralDrone => 100, _ => 150 };
+        Events.Add(new WorldEvent(WorldEventKind.EnemyKilled, e.X, e.Y, (int)e.Kind));
+    }
+
+    private void UpdateEnemies()
+    {
+        int level = Maze.Level(Room);
+        float spd = 1f + 0.25f * level;
+        foreach (var e in Enemies)
+        {
+            if (!e.Alive) continue;
+            e.Timer++;
+            float dx = PlayerX - e.X, dy = PlayerY - e.Y;
+            float dist = MathF.Sqrt(dx * dx + dy * dy) + 0.0001f;
+            switch (e.Kind)
+            {
+                case EnemyKind.RoboDroid: // plods along one axis toward the player
+                    {
+                        float v = 0.045f * spd;
+                        if (MathF.Abs(dx) > MathF.Abs(dy)) e.X += MathF.Sign(dx) * v; else e.Y += MathF.Sign(dy) * v;
+                        break;
+                    }
+                case EnemyKind.SpiralDrone: // approaches along a swaying path
+                    {
+                        float v = 0.06f * spd;
+                        float ang = MathF.Atan2(dy, dx) + 1.1f * MathF.Sin(e.Timer * 0.08f + e.Phase);
+                        e.X += MathF.Cos(ang) * v; e.Y += MathF.Sin(ang) * v;
+                        break;
+                    }
+                default: // snap jumper: pause, then dash toward the player
+                    {
+                        if (e.DashLeft > 0)
+                        {
+                            e.X += e.DashX; e.Y += e.DashY; e.DashLeft--;
+                        }
+                        else if (e.Timer % 50 == 0)
+                        {
+                            float v = 0.32f * spd;
+                            if (MathF.Abs(dx) > MathF.Abs(dy)) { e.DashX = MathF.Sign(dx) * v; e.DashY = 0; }
+                            else { e.DashX = 0; e.DashY = MathF.Sign(dy) * v; }
+                            e.DashLeft = 7;
+                        }
+                        break;
+                    }
+            }
+
+            // enemies are destroyed by touching walls
+            if (!OpenArea(e.X, e.Y, 0.3f) || e.X < 0 || e.X >= RoomGrid.W || e.Y < 0 || e.Y >= RoomGrid.H) { KillEnemy(e); continue; }
+
+            // shooting when roughly lined up with the player
+            if (e.ShotCooldown > 0) e.ShotCooldown--;
+            else if ((MathF.Abs(dx) < 1f || MathF.Abs(dy) < 1f) && EnemyBullets.Count < 3 + level && dist < 24f)
+            {
+                float v = Config.EnemyBulletSpeed;
+                EnemyBullets.Add(new Bullet { X = e.X, Y = e.Y, DX = MathF.Abs(dx) < 1f ? 0 : MathF.Sign(dx) * v, DY = MathF.Abs(dx) < 1f ? MathF.Sign(dy) * v : 0 });
+                e.ShotCooldown = Config.EnemyShotCooldown;
+                Events.Add(new WorldEvent(WorldEventKind.EnemyShot, e.X, e.Y));
+            }
+
+            // contact kills the player
+            float rr = Config.EnemyRadius + Config.PlayerRadius;
+            if (dist < rr) { KillEnemy(e); Die(); break; }
+        }
+        Enemies.RemoveAll(e => !e.Alive);
+        if (!RoomCleared && Enemies.Count == 0) { RoomCleared = true; Events.Add(new WorldEvent(WorldEventKind.RoomCleared)); }
+    }
+
+    private void UpdateEnemyBullets()
+    {
+        for (int i = EnemyBullets.Count - 1; i >= 0; i--)
+        {
+            var b = EnemyBullets[i];
+            b.X += b.DX; b.Y += b.DY;
+            int cx = (int)MathF.Floor(b.X), cy = (int)MathF.Floor(b.Y);
+            bool dead = b.X < 0 || b.X >= RoomGrid.W || b.Y < 0 || b.Y >= RoomGrid.H || Grid.IsSolid(cx, cy);
+            float px = b.X - PlayerX, py = b.Y - PlayerY;
+            if (!dead && px * px + py * py < 0.45f * 0.45f) { EnemyBullets.RemoveAt(i); Die(); return; }
+            if (dead) EnemyBullets.RemoveAt(i);
+        }
     }
 
     private void UpdateSlits()
@@ -129,7 +250,8 @@ public sealed class GameWorld
         int mx = Math.Sign(input.MoveX), my = Math.Sign(input.MoveY);
         if (mx != 0 || my != 0) { FaceX = mx; FaceY = my; }
         float len = (mx != 0 && my != 0) ? 0.70710678f : 1f;
-        float nx = PlayerX + mx * Config.PlayerSpeed * len, ny = PlayerY + my * Config.PlayerSpeed * len;
+        float spd = Config.PlayerSpeed * (RoomCleared && !IsPodRoom ? Config.ClearedSpeedBonus : 1f);
+        float nx = PlayerX + mx * spd * len, ny = PlayerY + my * spd * len;
 
         // pod barriers are solid for the player
         if (InBarrier(nx + mx * Config.PlayerRadius, PlayerY)) nx = PlayerX;
@@ -175,6 +297,10 @@ public sealed class GameWorld
                     }
                     if (InBarrier(b.X, b.Y)) { dead = true; Events.Add(new WorldEvent(WorldEventKind.BulletHitBarrier, b.X, b.Y)); break; }
                 }
+                foreach (var e in Enemies)
+                    if (e.Alive && (e.X - b.X) * (e.X - b.X) + (e.Y - b.Y) * (e.Y - b.Y) < 0.7f * 0.7f)
+                    { KillEnemy(e); dead = true; break; }
+                if (dead) break;
                 int cx = (int)MathF.Floor(b.X), cy = (int)MathF.Floor(b.Y);
                 if (cx >= 0 && cx < RoomGrid.W && cy >= 0 && cy < RoomGrid.H && Grid.IsSolid(cx, cy))
                 { dead = true; Events.Add(new WorldEvent(WorldEventKind.BulletHitWall, b.X, b.Y)); }
