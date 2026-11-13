@@ -172,14 +172,28 @@ public sealed class GameWorld
         double r = _rng.NextDouble();
         bool horiz = MathF.Abs(dx) > MathF.Abs(dy);
         int towardX = MathF.Sign(dx) == 0 ? 1 : (int)MathF.Sign(dx), towardY = MathF.Sign(dy) == 0 ? 1 : (int)MathF.Sign(dy);
-        // axis direction (robo / snap)
-        if (r < 0.50) { e.DirX = horiz ? towardX : 0; e.DirY = horiz ? 0 : towardY; }          // toward, dominant axis
-        else if (r < 0.65) { e.DirX = horiz ? 0 : towardX; e.DirY = horiz ? towardY : 0; }     // toward, other axis
-        else if (r < 0.80) { e.DirX = horiz ? -towardX : 0; e.DirY = horiz ? 0 : -towardY; }   // step back
-        else { int d = _rng.Next(4); e.DirX = d == 0 ? 1 : d == 1 ? -1 : 0; e.DirY = d == 2 ? 1 : d == 3 ? -1 : 0; } // wander
-        // spiral drone: angular offset from the straight line to the player
-        e.Offset = r < 0.45 ? 0f : r < 0.70 ? (_rng.Next(2) == 0 ? 1.57f : -1.57f)   // circle around
-                 : r < 0.85 ? 3.14f + (float)(_rng.NextDouble() - 0.5)              // retreat
+        // Robo-droid: methodical, mostly purposeful pursuit with the occasional detour.
+        if (e.Kind == EnemyKind.RoboDroid)
+        {
+            if (r < 0.75) { e.DirX = horiz ? towardX : 0; e.DirY = horiz ? 0 : towardY; }
+            else if (r < 0.90) { e.DirX = horiz ? 0 : towardX; e.DirY = horiz ? towardY : 0; }
+            else { int d = _rng.Next(4); e.DirX = d == 0 ? 1 : d == 1 ? -1 : 0; e.DirY = d == 2 ? 1 : d == 3 ? -1 : 0; }
+            e.ModeLeft = 25 + _rng.Next(40);
+            return;
+        }
+        // Snap jumper: aggressive, jumps almost always straight at the player (direction stored as a unit vector).
+        if (e.Kind == EnemyKind.SnapJumper)
+        {
+            float len = MathF.Sqrt(dx * dx + dy * dy) + 0.0001f;
+            float ux = dx / len, uy = dy / len;
+            if (r < 0.15f) { float sx = -uy, sy = ux; if (_rng.Next(2) == 0) { sx = -sx; sy = -sy; } ux = sx; uy = sy; } // sidestep jump
+            e.JumpX = ux; e.JumpY = uy;
+            e.ModeLeft = 10;
+            return;
+        }
+        // Spiral drone: chaotic, changing trajectories; angular offset from the straight line to the player.
+        e.Offset = r < 0.35 ? 0f : r < 0.65 ? (_rng.Next(2) == 0 ? 1.57f : -1.57f)  // circle around
+                 : r < 0.80 ? 3.14f + (float)(_rng.NextDouble() - 0.5)              // retreat
                  : (float)(_rng.NextDouble() * 6.28);                               // drift
         e.ModeLeft = 15 + _rng.Next(45);
     }
@@ -199,7 +213,7 @@ public sealed class GameWorld
             {
                 case EnemyKind.RoboDroid: // plods along axes; direction re-chosen every so often
                     {
-                        float v = 0.045f * spd;
+                        float v = 0.036f * spd;
                         if (!Move(e, e.DirX * v, e.DirY * v)) e.ModeLeft = 0; // blocked: decide again next tick
                         break;
                     }
@@ -217,12 +231,12 @@ public sealed class GameWorld
                         {
                             if (!Move(e, e.DashX, e.DashY)) e.DashLeft = 0; else e.DashLeft--;
                         }
-                        else if (e.Timer % 45 == 0)
+                        else if (e.Timer % 32 == 0)
                         {
                             Decide(e, dx, dy);
-                            float v = 0.32f * spd;
-                            e.DashX = e.DirX * v; e.DashY = e.DirY * v;
-                            e.DashLeft = 4 + _rng.Next(5);
+                            float v = 0.5f * spd;                // fast, large jump (~4 cells)
+                            e.DashX = e.JumpX * v; e.DashY = e.JumpY * v;
+                            e.DashLeft = 8;
                         }
                         break;
                     }
@@ -230,12 +244,25 @@ public sealed class GameWorld
 
             // shooting when roughly lined up with the player
             if (e.ShotCooldown > 0) e.ShotCooldown--;
-            else if ((MathF.Abs(dx) < 1f || MathF.Abs(dy) < 1f) && EnemyBullets.Count < 3 + level && dist < 24f)
+            else if (EnemyBullets.Count < 3 + level && dist < 26f)
             {
                 float v = Config.EnemyBulletSpeed;
-                EnemyBullets.Add(new Bullet { X = e.X, Y = e.Y, DX = MathF.Abs(dx) < 1f ? 0 : MathF.Sign(dx) * v, DY = MathF.Abs(dx) < 1f ? MathF.Sign(dy) * v : 0 });
-                e.ShotCooldown = Config.EnemyShotCooldown;
-                Events.Add(new WorldEvent(WorldEventKind.EnemyShot, e.X, e.Y));
+                bool aligned = MathF.Abs(dx) < 1f || MathF.Abs(dy) < 1f;
+                if (e.Kind == EnemyKind.SpiralDrone)
+                {
+                    // suppressive fire: a fan of three shots toward the player's side of the room
+                    float ang = MathF.Atan2(dy, dx);
+                    for (int k = -1; k <= 1; k++)
+                        EnemyBullets.Add(new Bullet { X = e.X, Y = e.Y, DX = MathF.Cos(ang + k * 0.35f) * v, DY = MathF.Sin(ang + k * 0.35f) * v });
+                    e.ShotCooldown = Config.EnemyShotCooldown + 30;
+                    Events.Add(new WorldEvent(WorldEventKind.EnemyShot, e.X, e.Y, (int)e.Kind));
+                }
+                else if (aligned)
+                {
+                    EnemyBullets.Add(new Bullet { X = e.X, Y = e.Y, DX = MathF.Abs(dx) < 1f ? 0 : MathF.Sign(dx) * v, DY = MathF.Abs(dx) < 1f ? MathF.Sign(dy) * v : 0 });
+                    e.ShotCooldown = e.Kind == EnemyKind.SnapJumper ? Config.EnemyShotCooldown * 2 : Config.EnemyShotCooldown;
+                    Events.Add(new WorldEvent(WorldEventKind.EnemyShot, e.X, e.Y, (int)e.Kind));
+                }
             }
 
             // contact kills the player

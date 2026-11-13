@@ -14,5 +14,6 @@ public sealed class Enemy
     public int ModeLeft;      // ticks until the next behaviour decision
     public float Offset;      // angle offset from "straight at player" (circling / retreating)
     public int DirX, DirY;    // current axis direction (robo droid)
+    public float JumpX, JumpY; // snap jumper: unit vector of the next jump
     public bool Alive = true;
 }
