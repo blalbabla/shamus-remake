@@ -25,7 +25,7 @@ public sealed class GameApp
     private readonly string[] _args;
     private readonly Settings _settings = Settings.Load();
     private readonly AudioManager _audio = new();
-    private readonly SceneRenderer _scene = new();
+    private SceneRenderer _scene = null!;
     private readonly Hud _hud = new();
     private readonly Menu _titleMenu = new(), _pauseMenu = new();
     private readonly List<string> _mazes = new();
@@ -152,6 +152,11 @@ public sealed class GameApp
         Raylib.InitWindow(W, H, "Shamus 3D");
         Raylib.SetExitKey(KeyboardKey.Null);
         Raylib.SetTargetFPS(60);
+        _scene = new SceneRenderer(_settings.View);
+        string view = Arg("--view");
+        if (view is "top" or "iso") _scene.Rig.SetMode(view == "iso" ? ViewMode.Isometric : ViewMode.Top, instant: true);
+        string shot = Arg("--shot");
+        int frame = 0;
         _audio.Init();
         ApplyAudioSettings();
         BuildMenus();
@@ -167,7 +172,15 @@ public sealed class GameApp
             Raylib.ClearBackground(new Color(8, 8, 14, 255));
             Draw(dt);
             Raylib.EndDrawing();
+            if (shot.Length > 0 && ++frame == 8)   // debug: save one frame and quit
+            {
+                var img = Raylib.LoadImageFromScreen();
+                Raylib.ExportImage(img, shot);
+                Raylib.UnloadImage(img);
+                break;
+            }
         }
+        _scene.Dispose();
         SubmitScore();
         _settings.Save();
         _audio.Dispose();
@@ -178,6 +191,11 @@ public sealed class GameApp
     {
         if (Raylib.IsKeyPressed(KeyboardKey.F2)) { _settings.Muted = !_settings.Muted; ApplyAudioSettings(); _settings.Save(); }
         _hud.Update(dt);
+        _scene.Rig.Update(dt);
+        if (_state is AppState.Playing or AppState.Title && Raylib.IsKeyPressed(KeyboardKey.V))
+        {
+            _scene.Rig.Toggle(); _settings.View = _scene.Rig.Mode; _settings.Save();
+        }
         UpdateAmbience();
 
         switch (_state)

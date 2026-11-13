@@ -13,6 +13,7 @@ public sealed class Settings
     public bool Muted { get; set; }
     public bool GodMode { get; set; }
     public int Seed { get; set; } = 1;
+    public Shamus.Game.Rendering.ViewMode View { get; set; } = Shamus.Game.Rendering.ViewMode.Top;
     public Dictionary<string, int> HighScores { get; set; } = new();
 
     private static string FilePath =>

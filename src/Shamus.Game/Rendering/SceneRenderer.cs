@@ -7,19 +7,18 @@ using Shamus.Core.Simulation;
 namespace Shamus.Game.Rendering;
 
 /// <summary>Draws the current room in 3D (top-down orthographic camera). Reads world state only.</summary>
-public sealed class SceneRenderer
+public sealed class SceneRenderer : IDisposable
 {
     public static readonly Color[] LevelColors = { new(220, 90, 80, 255), new(80, 120, 240, 255), new(80, 200, 100, 255), new(230, 70, 70, 255) };
     public static readonly string[] LevelNames = { "BLACK", "BLUE", "GREEN", "RED" };
 
-    private readonly Camera3D _cam = new()
-    {
-        Position = new Vector3(0, 40, 0.01f),
-        Target = Vector3.Zero,
-        Up = new Vector3(0, 0, -1),
-        FovY = RoomGrid.W * 0.62f,
-        Projection = CameraProjection.Orthographic,
-    };
+    public CameraRig Rig { get; }
+    private readonly RoomView _room = new();
+
+    public SceneRenderer(ViewMode mode = ViewMode.Top) { Rig = new CameraRig(mode); }
+
+    public void Dispose() => _room.Dispose();
+
     private const float Ox = -RoomGrid.W / 2f, Oz = -RoomGrid.H / 2f;
     private static Vector3 P(float x, float y, float h) => new(Ox + x, h, Oz + y);
 
@@ -28,43 +27,36 @@ public sealed class SceneRenderer
     {
         var maze = world.Maze;
         Vector3? mysteryPos = null;
-        Raylib.BeginMode3D(_cam);
+        Raylib.BeginMode3D(Rig.Camera);
 
-        var wall = LevelColors[maze.Level(world.Room)];
-        Raylib.DrawCube(new Vector3(0, -0.5f, 0), RoomGrid.W, 1, RoomGrid.H, new Color(18, 18, 28, 255));
-        var g = world.Grid;
-        for (int y = 0; y < RoomGrid.H; y++)
-        {
-            for (int x = 0; x < RoomGrid.W;)
-            {
-                if (!g.IsSolid(x, y)) { x++; continue; }
-                int x0 = x; while (x < RoomGrid.W && g.IsSolid(x, y)) x++;
-                float w = x - x0;
-                var c = P(x0 + w / 2f, y + 0.5f, 0.75f);
-                Raylib.DrawCube(c, w, 1.5f, 1f, wall);
-                Raylib.DrawCubeWires(c, w, 1.5f, 1f, Color.Black);
-            }
-        }
+        int level = maze.Level(world.Room);
+        Color? doorColor = world.DoorClosed && world.Obj != null ? AtariPalette.ToColor(world.Obj.Hue, world.Obj.Luma) : null;
+        int doorSide = world.DoorClosed ? world.DoorSide : 0;
+        double time = Raylib.GetTime();
+        _room.DrawSolid(world.Grid, world.Room, level, time, doorColor, doorSide);
 
-        if (world.DoorClosed && world.Obj != null)
-        {
-            var dc = AtariPalette.ToColor(world.Obj.Hue, world.Obj.Luma);
-            float dxc = world.DoorSide < 0 ? 0.5f : RoomGrid.W - 0.5f;
-            Raylib.DrawCube(P(dxc, (RoomGrid.DoorY0 + RoomGrid.DoorY1) / 2f, 0.9f), 1f, 1.8f, RoomGrid.DoorY1 - RoomGrid.DoorY0, dc);
-        }
         if (world.Obj != null) mysteryPos = DrawObject(world.Obj);
 
         if (world.IsPodRoom && !world.PodOpen)
         {
-            var bar = new Color(240, 220, 60, 255);
+            // energy barriers: translucent amber slabs with bright edges
+            Rlgl.DisableDepthMask();
+            Raylib.BeginBlendMode(BlendMode.Additive);
             for (int i = 0; i < 2; i++)
             {
                 float bx = config.PodBarrierX0[i] + config.PodBarrierWidth / 2f;
-                float s = world.SlitY[i], sh = config.PodSlitHeight;
-                float topH = s - 1f, botY0 = s + sh, botH = RoomGrid.H - 1f - botY0;
-                Raylib.DrawCube(P(bx, 1f + topH / 2f, 0.75f), config.PodBarrierWidth, 1.5f, topH, bar);
-                Raylib.DrawCube(P(bx, botY0 + botH / 2f, 0.75f), config.PodBarrierWidth, 1.5f, botH, bar);
+                float s0 = world.SlitY[i], sh = config.PodSlitHeight;
+                float topH = s0 - 1f, botY0 = s0 + sh, botH = RoomGrid.H - 1f - botY0;
+                var fill = new Color((byte)255, (byte)190, (byte)30, (byte)70);
+                var edge = new Color((byte)255, (byte)230, (byte)120, (byte)200);
+                foreach (var (cy, hh) in new[] { (1f + topH / 2f, topH), (botY0 + botH / 2f, botH) })
+                {
+                    Raylib.DrawCube(P(bx, cy, 0.8f), config.PodBarrierWidth, 1.6f, hh, fill);
+                    Raylib.DrawCubeWires(P(bx, cy, 0.8f), config.PodBarrierWidth, 1.6f, hh, edge);
+                }
             }
+            Raylib.EndBlendMode();
+            Rlgl.EnableDepthMask();
         }
 
         float px = world.PrevPlayerX + (world.PlayerX - world.PrevPlayerX) * alpha;
@@ -110,10 +102,11 @@ public sealed class SceneRenderer
         foreach (var b in world.EnemyBullets) Raylib.DrawSphere(P(b.X, b.Y, 0.9f), 0.2f, Color.Orange);
         foreach (var b in world.Bullets) Raylib.DrawSphere(P(b.X, b.Y, 0.9f), 0.22f, Color.SkyBlue);
 
+        _room.DrawGlow(world.Grid, level, time, doorColor, doorSide);
         Raylib.EndMode3D();
         if (mysteryPos is Vector3 mp)
         {
-            var sp = Raylib.GetWorldToScreen(mp, _cam);
+            var sp = Raylib.GetWorldToScreen(mp, Rig.Camera);
             Raylib.DrawText("?", (int)sp.X - 8, (int)sp.Y - 14, 32, Color.White);
         }
     }
