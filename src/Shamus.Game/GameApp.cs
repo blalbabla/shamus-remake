@@ -8,7 +8,7 @@ using Shamus.Game.Ui;
 
 namespace Shamus.Game;
 
-public enum AppState { Title, Playing, Paused, GameOver }
+public enum AppState { Title, Playing, Paused, GameOver, Map }
 
 /// <summary>Window, state machine (title / playing / paused / game over), fixed-step loop.</summary>
 public sealed class GameApp
@@ -34,6 +34,7 @@ public sealed class GameApp
     private AppState _state = AppState.Title;
     private GameConfig _config = new();
     private MazeData _maze = null!;
+    private MapLayout _map = null!;
     private GameWorld _world = null!;
     private int _startRoom;
     private float _acc, _gameOverTimer;
@@ -56,6 +57,8 @@ public sealed class GameApp
         }
         return Path.Combine(AppContext.BaseDirectory, "assets", "config.json");
     }
+
+    private GameConfig BuildConfig() => GameConfig.Load(ConfigPath()).WithDifficulty(_settings.Difficulty).WithGodMode(_settings.GodMode);
 
     private static string MazePath(string name) => Path.Combine(AppContext.BaseDirectory, "assets", "mazes", name + ".maze");
 
@@ -90,6 +93,11 @@ public sealed class GameApp
                 ApplyAudioSettings(); _settings.Save(); _audio.Play(Sfx.RoomEnter);
             },
         });
+        _titleMenu.Items.Add(new MenuItem
+        {
+            Label = () => "GOD MODE: " + (_settings.GodMode ? "ON (test)" : "OFF"),
+            OnChange = _ => { _settings.GodMode = !_settings.GodMode; _settings.Save(); },
+        });
         _titleMenu.Items.Add(new MenuItem { Label = () => "QUIT", OnEnter = () => _quit = true });
 
         _pauseMenu.Items.Add(new MenuItem { Label = () => "RESUME", OnEnter = () => _state = AppState.Playing });
@@ -102,21 +110,22 @@ public sealed class GameApp
     private void LoadDemo()
     {
         _maze = MazeLoader.Load(MazePath(_settings.Maze));
-        _config = GameConfig.Load(ConfigPath()).WithDifficulty(_settings.Difficulty);
+        _config = BuildConfig();
         _world = new GameWorld(_maze, _config, 0);
+        _map = MapLayout.Load(Path.Combine(AppContext.BaseDirectory, "assets", "maps"), _maze);
     }
 
     private void StartGame(int room)
     {
         _maze = MazeLoader.Load(MazePath(_settings.Maze));
-        _config = GameConfig.Load(ConfigPath()).WithDifficulty(_settings.Difficulty);
+        _config = BuildConfig();
         _startRoom = room;
         _world = new GameWorld(_maze, _config, room);
         _acc = 0; _gameOverTimer = 0; _newHigh = false;
         _state = AppState.Playing;
     }
 
-    private void SubmitScore() { if (_world != null && _state != AppState.Title) _newHigh |= _settings.Submit(_settings.Maze, _world.Score); }
+    private void SubmitScore() { if (_world != null && _state != AppState.Title && !_config.GodMode) _newHigh |= _settings.Submit(_settings.Maze, _world.Score); }
 
     private void ToTitle() { SubmitScore(); _state = AppState.Title; _titleMenu.Reset(); LoadDemo(); }
 
@@ -151,7 +160,7 @@ public sealed class GameApp
 
     private void Update(float dt)
     {
-        if (Raylib.IsKeyPressed(KeyboardKey.M)) { _settings.Muted = !_settings.Muted; ApplyAudioSettings(); _settings.Save(); }
+        if (Raylib.IsKeyPressed(KeyboardKey.F2)) { _settings.Muted = !_settings.Muted; ApplyAudioSettings(); _settings.Save(); }
         _hud.Update(dt);
 
         switch (_state)
@@ -159,6 +168,10 @@ public sealed class GameApp
             case AppState.Title:
                 _titleMenu.Update();
                 if (Raylib.IsKeyPressed(KeyboardKey.Escape)) _quit = true;
+                break;
+
+            case AppState.Map:
+                if (Raylib.IsKeyPressed(KeyboardKey.M) || Raylib.IsKeyPressed(KeyboardKey.Escape) || Raylib.IsKeyPressed(KeyboardKey.Tab)) _state = AppState.Playing;
                 break;
 
             case AppState.Paused:
@@ -172,17 +185,20 @@ public sealed class GameApp
                 break;
 
             case AppState.Playing:
+                if (Raylib.IsKeyPressed(KeyboardKey.M) || Raylib.IsKeyPressed(KeyboardKey.Tab)) { _state = AppState.Map; break; }
                 if (Raylib.IsKeyPressed(KeyboardKey.Escape) || Raylib.IsKeyPressed(KeyboardKey.P)) { _pauseMenu.Reset(); _state = AppState.Paused; break; }
-                if (Raylib.IsKeyPressed(KeyboardKey.F5)) { _config = GameConfig.Load(ConfigPath()).WithDifficulty(_settings.Difficulty); _world = new GameWorld(_maze, _config, _world.Room); }
+                if (Raylib.IsKeyPressed(KeyboardKey.F5)) { _config = BuildConfig(); _world = new GameWorld(_maze, _config, _world.Room); }
                 if (_debug && Raylib.IsKeyPressed(KeyboardKey.RightBracket)) _world = new GameWorld(_maze, _config, _world.Room + 1);
                 if (_debug && Raylib.IsKeyPressed(KeyboardKey.LeftBracket)) _world = new GameWorld(_maze, _config, _world.Room - 1);
 
-                int mx = 0, my = 0;
-                if (Raylib.IsKeyDown(KeyboardKey.A) || Raylib.IsKeyDown(KeyboardKey.Left)) mx--;
-                if (Raylib.IsKeyDown(KeyboardKey.D) || Raylib.IsKeyDown(KeyboardKey.Right)) mx++;
-                if (Raylib.IsKeyDown(KeyboardKey.W) || Raylib.IsKeyDown(KeyboardKey.Up)) my--;
-                if (Raylib.IsKeyDown(KeyboardKey.S) || Raylib.IsKeyDown(KeyboardKey.Down)) my++;
-                bool fire = Raylib.IsKeyDown(KeyboardKey.Space) || Raylib.IsKeyDown(KeyboardKey.LeftControl);
+                // WASD, arrows and the numpad (8/4/2/6 plus 7/9/1/3 diagonals; Home/PgUp/End/PgDn when NumLock is off)
+                static bool Down(params KeyboardKey[] k) { foreach (var x in k) if (Raylib.IsKeyDown(x)) return true; return false; }
+                bool left = Down(KeyboardKey.A, KeyboardKey.Left, KeyboardKey.Kp4, KeyboardKey.Kp7, KeyboardKey.Kp1, KeyboardKey.Home, KeyboardKey.End);
+                bool right = Down(KeyboardKey.D, KeyboardKey.Right, KeyboardKey.Kp6, KeyboardKey.Kp9, KeyboardKey.Kp3, KeyboardKey.PageUp, KeyboardKey.PageDown);
+                bool up = Down(KeyboardKey.W, KeyboardKey.Up, KeyboardKey.Kp8, KeyboardKey.Kp7, KeyboardKey.Kp9, KeyboardKey.Home, KeyboardKey.PageUp);
+                bool dn = Down(KeyboardKey.S, KeyboardKey.Down, KeyboardKey.Kp2, KeyboardKey.Kp1, KeyboardKey.Kp3, KeyboardKey.End, KeyboardKey.PageDown);
+                int mx = (right ? 1 : 0) - (left ? 1 : 0), my = (dn ? 1 : 0) - (up ? 1 : 0);
+                bool fire = Down(KeyboardKey.Space, KeyboardKey.LeftControl, KeyboardKey.RightControl, KeyboardKey.Kp0, KeyboardKey.Kp5);
 
                 _acc = MathF.Min(_acc + dt, 0.1f);
                 while (_acc >= Step)
@@ -219,6 +235,10 @@ public sealed class GameApp
 
             case AppState.Playing:
                 _hud.Draw(_world, _maze.Name, _settings.HighScore(_settings.Maze), W, H, _world.TickCount < 600);
+                break;
+
+            case AppState.Map:
+                MapView.Draw(_map, _world, W, H);
                 break;
 
             case AppState.Paused:

@@ -29,6 +29,7 @@ public sealed class GameConfig
     public int WinTicks { get; init; } = 180;
     public float CycleEnemySpeedBonus { get; init; } = 0.2f;
     public float EnemySpeedScale { get; init; } = 1f;
+    public bool GodMode { get; init; }   // test aid: walls and enemies do not kill
     public int Seed { get; init; } = 1;
     public float EnemyRadius { get; init; } = 0.5f;
     public float EnemyBulletSpeed { get; init; } = 0.28f;
@@ -62,6 +63,13 @@ public sealed class GameConfig
             case Difficulty.Expert:
                 o["EnemySpeedScale"] = EnemySpeedScale * 1.25f; o["EnemyShotCooldown"] = (int)(EnemyShotCooldown * 0.75f); o["StartLives"] = Math.Max(3, StartLives - 1); break;
         }
+        return o.Deserialize<GameConfig>(Json)!;
+    }
+
+    public GameConfig WithGodMode(bool god)
+    {
+        var o = JsonSerializer.SerializeToNode(this, Json)!.AsObject();
+        o["GodMode"] = god;
         return o.Deserialize<GameConfig>(Json)!;
     }
 

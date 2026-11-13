@@ -10,6 +10,7 @@ public sealed class Settings
     public Difficulty Difficulty { get; set; } = Difficulty.Advanced;
     public float Volume { get; set; } = 0.8f;
     public bool Muted { get; set; }
+    public bool GodMode { get; set; }
     public Dictionary<string, int> HighScores { get; set; } = new();
 
     private static string FilePath =>

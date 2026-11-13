@@ -85,8 +85,9 @@ public sealed class Hud
         Text($"{w.Maze.Name.ToUpperInvariant()}" + (w.Cycle > 0 ? $"   LOOP {w.Cycle + 1}" : ""), 480, screenH - 32, 24, Color.LightGray);
         string status = w.Enemies.Count > 0 ? $"ENEMIES {w.Enemies.Count}" : w.IsPodRoom ? "SHOOT THE TARGET" : "CLEAR";
         Text(status, screenW - 250, screenH - 32, 24, w.Enemies.Count > 0 ? Color.Orange : Color.Lime);
-        if (showHelp) Text("WASD move   SPACE fire   P pause   M mute", 16, screenH - 64, 18, Color.Gray);
+        if (showHelp) Text("WASD move   SPACE fire   P pause   M map   F2 mute", 16, screenH - 64, 18, Color.Gray);
 
+        if (w.Config.GodMode) Text("GOD MODE", screenW / 2 - 70, 12, 24, Color.Lime);
         if (w.ShadowWarned && !w.ShadowActive && !w.IsPodRoom && (w.TickCount / 20) % 2 == 0)
             TextCentered("!!  THE SHADOW APPROACHES  !!", 70, 32, Color.Red, screenW);
         if (w.ShadowActive) TextCentered("RUN!", 70, 32, Color.Red, screenW);

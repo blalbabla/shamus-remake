@@ -255,3 +255,49 @@ public class DifficultyTests
         Assert.Equal(b.EnemySpeedScale, b.WithDifficulty(Difficulty.Advanced).EnemySpeedScale);
     }
 }
+
+public class BoundaryAndGodTests
+{
+    static MazeData Maze()
+    {
+        var d = new DirectoryInfo(AppContext.BaseDirectory);
+        while (!Directory.Exists(Path.Combine(d.FullName, "assets", "mazes"))) d = d.Parent!;
+        return MazeLoader.Load(Path.Combine(d.FullName, "assets", "mazes", "c64.maze"));
+    }
+
+    [Fact]
+    public void Room0HasNoLeftExit()
+    {
+        var w = new GameWorld(Maze(), new GameConfig { GodMode = true }, 0);
+        w.Enemies.Clear();
+        for (int i = 0; i < 200; i++) w.Tick(new InputState(-1, 0, false));
+        Assert.Equal(0, w.Room);
+        Assert.True(w.PlayerX >= 1.0f);
+    }
+
+    [Fact]
+    public void Room0LeftWallKillsWithoutGodMode()
+    {
+        var w = new GameWorld(Maze(), new GameConfig { StartLives = 3 }, 0);
+        w.Enemies.Clear();
+        for (int i = 0; i < 200 && w.Lives == 3; i++) w.Tick(new InputState(-1, 0, false));
+        Assert.Equal(2, w.Lives);
+    }
+
+    [Fact]
+    public void GodModeWallsAndEnemiesDoNotKill()
+    {
+        var w = new GameWorld(Maze(), new GameConfig { GodMode = true, StartLives = 3 }, 0);
+        for (int i = 0; i < 600; i++) w.Tick(new InputState(i % 100 < 50 ? 1 : 0, i % 100 < 50 ? 0 : 1, false));
+        Assert.Equal(3, w.Lives);
+        Assert.Equal(GamePhase.Playing, w.Phase);
+    }
+
+    [Fact]
+    public void VisitedRoomsAreTracked()
+    {
+        var w = new GameWorld(Maze(), new GameConfig(), 3);
+        Assert.Contains(3, w.Visited);
+        Assert.DoesNotContain(4, w.Visited);
+    }
+}

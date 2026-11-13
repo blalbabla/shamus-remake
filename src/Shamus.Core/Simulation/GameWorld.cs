@@ -32,6 +32,10 @@ public sealed class GameWorld
     public int Score { get; private set; }
     public bool RoomCleared { get; private set; }
     private readonly Random _rng;
+    private readonly HashSet<int> _visited = new();
+    public IReadOnlySet<int> Visited => _visited;
+    /// <summary>True if the room's object was collected or its door unlocked.</summary>
+    public bool IsTaken(int room) => _taken.Contains(room) || _unlocked.Contains(room);
 
     // Shadow: relentless, invulnerable chaser that appears when you linger in a room.
     public bool ShadowActive { get; private set; }
@@ -72,6 +76,10 @@ public sealed class GameWorld
     {
         Room = Math.Clamp(room, 0, MazeData.RoomCount - 1);
         Grid = RoomGrid.Build(Maze, Room);
+        _visited.Add(Room);
+        // the maze boundary: electrified wall instead of an exit
+        if (Room == 0) Grid.SetSolid(0, RoomGrid.DoorY0, 1, RoomGrid.DoorY1, true);
+        if (Room == MazeData.RoomCount - 1) Grid.SetSolid(RoomGrid.W - 1, RoomGrid.DoorY0, RoomGrid.W, RoomGrid.DoorY1, true);
         PlayerX = PrevPlayerX = _entryX = x;
         PlayerY = PrevPlayerY = _entryY = y;
         Bullets.Clear();
@@ -407,13 +415,20 @@ public sealed class GameWorld
         if (InBarrier(PlayerX, ny + my * Config.PlayerRadius)) ny = PlayerY;
         PlayerX = nx; PlayerY = ny;
 
-        if (Config.WallsKill && PlayerHitsWall(PlayerX, PlayerY)) { Die(); return; }
+        if (Config.WallsKill && PlayerHitsWall(PlayerX, PlayerY))
+        {
+            if (!Config.GodMode) { Die(); return; }
+            // god mode: walls still block, but do not kill; slide along them
+            if (!PlayerHitsWall(nx, PrevPlayerY)) { PlayerX = nx; PlayerY = PrevPlayerY; }
+            else if (!PlayerHitsWall(PrevPlayerX, ny)) { PlayerX = PrevPlayerX; PlayerY = ny; }
+            else { PlayerX = PrevPlayerX; PlayerY = PrevPlayerY; }
+        }
 
         if (PlayerX >= RoomGrid.W) EnterRoom(Room + 1, 1.5f, PlayerY);
         else if (PlayerX < 0) EnterRoom(Room - 1, RoomGrid.W - 1.5f, PlayerY);
         else if (Corridor && PlayerY < 0) EnterRoom(Maze.VerticalLink(Room), PlayerX, RoomGrid.H - 1.5f);
         else if (Corridor && PlayerY >= RoomGrid.H) EnterRoom(Maze.VerticalLink(Room), PlayerX, 1.5f);
-        else if (!Corridor && (PlayerY < 0 || PlayerY >= RoomGrid.H)) Die();
+        else if (!Corridor && (PlayerY < 0 || PlayerY >= RoomGrid.H)) { if (Config.GodMode) PlayerY = Math.Clamp(PlayerY, 0.5f, RoomGrid.H - 0.5f); else Die(); }
     }
 
     private void Fire()
@@ -549,6 +564,7 @@ public sealed class GameWorld
 
     private void Die()
     {
+        if (Config.GodMode) return;
         Lives--;
         Events.Add(new WorldEvent(WorldEventKind.PlayerDied, PlayerX, PlayerY));
         if (Lives <= 0) { Phase = GamePhase.GameOver; Events.Add(new WorldEvent(WorldEventKind.GameOver)); }

@@ -55,6 +55,13 @@ public sealed class MazeData
     /// <summary>For keyhole rooms: true if the left exit is closed (bit 4), otherwise the right exit.</summary>
     public bool DoorOnLeft(int room) => (ColorByte(room) & 0x10) != 0;
 
+    /// <summary>Is the right exit of the room open (corridors: types with a right branch)?</summary>
+    public bool OpenRight(int room) => !IsCorridor(room) || IsPod(room) || (CorridorType(room) & 1) == 1;
+    /// <summary>Is the left exit of the room open?</summary>
+    public bool OpenLeft(int room) => !IsCorridor(room) || IsPod(room) || CorridorType(room) is 2 or 3 or 6 or 7;
+    /// <summary>For corridors: does the vertical exit lead down (types $80-$B0) rather than up?</summary>
+    public bool VerticalDown(int room) => CorridorType(room) < 4;
+
     public bool IsCorridor(int room) => (Horizontal(room) & 0x80) != 0;
     public bool IsPod(int room) => PodRooms.Contains(room);
     public RoomKind Kind(int room) => IsPod(room) ? RoomKind.Pod : IsCorridor(room) ? RoomKind.Corridor : RoomKind.Chamber;
