@@ -149,10 +149,14 @@ public sealed class RoomView : IDisposable
 
     private static Color Brighten(Color c, float f) => new((byte)Math.Min(255, c.R * f), (byte)Math.Min(255, c.G * f), (byte)Math.Min(255, c.B * f), c.A);
 
+    private const float PostHalf = 0.42f;   // beams start at the side faces of the generators, not at their centres
+
     private static void Beam(WallSegment s, float height, float thickness, Color color, float _)
     {
         float cx = (s.X0 + s.X1) / 2f, cy = (s.Y0 + s.Y1) / 2f;
         float lx = MathF.Abs(s.X1 - s.X0), ly = MathF.Abs(s.Y1 - s.Y0);
+        if (lx > ly) lx -= 2 * PostHalf; else ly -= 2 * PostHalf;   // shorten by the half-width of the posts at both ends
+        if (MathF.Max(lx, ly) < 0.05f) return;
         Raylib.DrawCube(P(cx, cy, height), MathF.Max(lx, thickness), thickness, MathF.Max(ly, thickness), color);
     }
 
