@@ -157,6 +157,15 @@ public sealed class GameWorld
         Events.Add(new WorldEvent(WorldEventKind.EnemyKilled, e.X, e.Y, (int)e.Kind));
     }
 
+    /// <summary>Moves an enemy unless a wall is in the way (walls do not harm enemies).</summary>
+    private bool Move(Enemy e, float dx, float dy)
+    {
+        float nx = e.X + dx, ny = e.Y + dy;
+        if (nx < 1f || nx >= RoomGrid.W - 1f || ny < 1f || ny >= RoomGrid.H - 1f || !OpenArea(nx, ny, 0.45f)) return false;
+        e.X = nx; e.Y = ny;
+        return true;
+    }
+
     private void UpdateEnemies()
     {
         int level = Maze.Level(Room);
@@ -172,21 +181,24 @@ public sealed class GameWorld
                 case EnemyKind.RoboDroid: // plods along one axis toward the player
                     {
                         float v = 0.045f * spd;
-                        if (MathF.Abs(dx) > MathF.Abs(dy)) e.X += MathF.Sign(dx) * v; else e.Y += MathF.Sign(dy) * v;
+                        bool horiz = MathF.Abs(dx) > MathF.Abs(dy);
+                        float sx = MathF.Sign(dx) * v, sy = MathF.Sign(dy) * v;
+                        if (!(horiz ? Move(e, sx, 0) : Move(e, 0, sy)))      // blocked: try the other axis
+                            _ = horiz ? Move(e, 0, sy) : Move(e, sx, 0);
                         break;
                     }
                 case EnemyKind.SpiralDrone: // approaches along a swaying path
                     {
                         float v = 0.06f * spd;
                         float ang = MathF.Atan2(dy, dx) + 1.1f * MathF.Sin(e.Timer * 0.08f + e.Phase);
-                        e.X += MathF.Cos(ang) * v; e.Y += MathF.Sin(ang) * v;
+                        Move(e, MathF.Cos(ang) * v, 0); Move(e, 0, MathF.Sin(ang) * v);
                         break;
                     }
                 default: // snap jumper: pause, then dash toward the player
                     {
                         if (e.DashLeft > 0)
                         {
-                            e.X += e.DashX; e.Y += e.DashY; e.DashLeft--;
+                            if (!Move(e, e.DashX, e.DashY)) e.DashLeft = 0; else e.DashLeft--;
                         }
                         else if (e.Timer % 50 == 0)
                         {
@@ -198,9 +210,6 @@ public sealed class GameWorld
                         break;
                     }
             }
-
-            // enemies are destroyed by touching walls
-            if (!OpenArea(e.X, e.Y, 0.3f) || e.X < 0 || e.X >= RoomGrid.W || e.Y < 0 || e.Y >= RoomGrid.H) { KillEnemy(e); continue; }
 
             // shooting when roughly lined up with the player
             if (e.ShotCooldown > 0) e.ShotCooldown--;
