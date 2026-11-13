@@ -214,7 +214,8 @@ public sealed class GameWorld
                 Phase = GamePhase.Playing;
                 PlayerX = PrevPlayerX = _entryX;
                 PlayerY = PrevPlayerY = _entryY;
-                Bullets.Clear(); EnemyBullets.Clear();
+                Bullets.Clear();
+                SpawnEnemies(); // a fresh random set of enemies, as on entering the room
             }
             return;
         }

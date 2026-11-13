@@ -181,3 +181,22 @@ public class ObjectTests
         Assert.Null(w.Obj);
     }
 }
+
+public class RespawnTests
+{
+    [Fact]
+    public void DeathRespawnsFreshEnemies()
+    {
+        var d = new DirectoryInfo(AppContext.BaseDirectory);
+        while (!Directory.Exists(Path.Combine(d.FullName, "assets", "mazes"))) d = d.Parent!;
+        var m = MazeLoader.Load(Path.Combine(d.FullName, "assets", "mazes", "c64.maze"));
+        var w = new GameWorld(m, new GameConfig { StartLives = 3 }, 0);
+        var before = w.Enemies.ToList();
+        for (int i = 0; i < 300 && w.Phase != GamePhase.Dying; i++) w.Tick(new InputState(0, 1, false)); // walk into a wall
+        Assert.Equal(GamePhase.Dying, w.Phase);
+        for (int i = 0; i < 100 && w.Phase == GamePhase.Dying; i++) w.Tick(new InputState(0, 0, false));
+        Assert.Equal(GamePhase.Playing, w.Phase);
+        Assert.NotEmpty(w.Enemies);
+        Assert.All(w.Enemies, e => Assert.DoesNotContain(e, before));
+    }
+}
