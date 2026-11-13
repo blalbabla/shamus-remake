@@ -15,6 +15,8 @@ public sealed class CameraRig
     private const float Distance = 60f;
     private const float TopHeight = RoomGrid.W * 0.62f;   // ortho view height in world units
     private const float IsoHeight = 33f;
+    /// <summary>The game always shows a 16:9 view; the window letterboxes it instead of changing the camera.</summary>
+    public const float Aspect = 16f / 9f;
     private static readonly Vector3 TopDir = Vector3.Normalize(new Vector3(0, 1, 0.0005f));      // camera offset direction (towards the camera)
     private static readonly Vector3 IsoDir = Vector3.Normalize(new Vector3(-1, 1, 1));
     private static readonly Vector3 TopUp = new(0, 0, -1), IsoUp = new(0, 1, 0);
@@ -62,5 +64,33 @@ public sealed class CameraRig
             FovY = (TopHeight + (IsoHeight - TopHeight) * s) / Zoom,
             Projection = CameraProjection.Orthographic,
         };
+    }
+
+    /// <summary>
+    /// Starts the 3D pass with a fixed 16:9 orthographic projection. Raylib's BeginMode3D derives the aspect
+    /// from the window, which would squeeze the scene in a non-16:9 window; this keeps the view constant.
+    /// </summary>
+    public void BeginView()
+    {
+        Rlgl.DrawRenderBatchActive();
+        Rlgl.MatrixMode(MatrixMode.Projection);
+        Rlgl.PushMatrix();
+        Rlgl.LoadIdentity();
+        float halfH = Camera.FovY / 2f, halfW = halfH * Aspect;
+        Rlgl.MultMatrixf(Raymath.MatrixOrtho(-halfW, halfW, -halfH, halfH, 0.01, 1000.0));
+        Rlgl.MatrixMode(MatrixMode.ModelView);
+        Rlgl.LoadIdentity();
+        Rlgl.MultMatrixf(Raymath.MatrixLookAt(Camera.Position, Camera.Target, Camera.Up));
+        Rlgl.EnableDepthTest();
+    }
+
+    public void EndView()
+    {
+        Rlgl.DrawRenderBatchActive();
+        Rlgl.MatrixMode(MatrixMode.ModelView);
+        Rlgl.LoadIdentity();
+        Rlgl.MatrixMode(MatrixMode.Projection);
+        Rlgl.PopMatrix();
+        Rlgl.DisableDepthTest();
     }
 }

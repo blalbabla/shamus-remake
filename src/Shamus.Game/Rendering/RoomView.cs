@@ -103,7 +103,7 @@ public sealed class RoomView : IDisposable
             var c = P(x, y, 0.8f);
             Raylib.DrawCube(c, 0.9f, 1.6f, 0.9f, PostBody);
             Raylib.DrawCube(P(x, y, 1.62f), 0.9f, 0.04f, 0.9f, PostTop);                       // solid lighter top face
-            Raylib.DrawCubeWires(c, 0.9f, 1.6f, 0.9f, PostEdge);
+            //Raylib.DrawCubeWires(c, 0.9f, 1.6f, 0.9f, PostEdge);
             Raylib.DrawCube(P(x, y, 1.68f), 0.4f, 0.1f, 0.4f, Brighten(neon, 0.75f + 0.25f * pulse));   // solid neon cap
         }
 
@@ -121,20 +121,21 @@ public sealed class RoomView : IDisposable
     }
 
     /// <summary>Additive glow around the beams and posts; draw last, after all opaque geometry.</summary>
-    public void DrawGlow(RoomGrid grid, int level, double time, Color? doorColor, int doorSide)
+    public void DrawGlow(RoomGrid grid, int level, Color? doorColor, int doorSide)
     {
         var neon = Neon[Math.Clamp(level, 0, 3)];
         var walls = grid.Walls;
+        // Flush the queued opaque geometry (posts, beams, floor) while depth writes are still on.
+        // DisableDepthMask only changes GL state and does not flush raylib's batch: without this call
+        // the posts would be rasterised with depth writes off, so the additive glow would draw over them.
+        Rlgl.DrawRenderBatchActive();
         Rlgl.DisableDepthMask();
         Raylib.BeginBlendMode(BlendMode.Additive);
-        int i = 0;
         foreach (var s in walls.Segments)
         {
             var col = IsDoor(s, doorSide) && doorColor is Color dc ? dc : neon;
-            float flick = 0.75f + 0.25f * MathF.Sin((float)time * 5f + i * 1.7f);
-            var glow = new Color(col.R, col.G, col.B, (byte)(70 * flick));
-            foreach (float h in BeamHeights) Beam(s, h, 0.65f, glow, 1f);
-            i++;
+            var glow = new Color(col.R, col.G, col.B, (byte)120);
+            foreach (float h in BeamHeights) Beam(s, h, 0.70f, glow, 1f);
         }
         Raylib.EndBlendMode();
         Rlgl.EnableDepthMask();

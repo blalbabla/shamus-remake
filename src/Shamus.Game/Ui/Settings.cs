@@ -12,6 +12,7 @@ public sealed class Settings
     public float MusicVolume { get; set; } = 0.6f;
     public bool Muted { get; set; }
     public bool GodMode { get; set; }
+    public bool Fullscreen { get; set; }
     public int Seed { get; set; } = 1;
     public Shamus.Game.Rendering.ViewMode View { get; set; } = Shamus.Game.Rendering.ViewMode.Top;
     public Dictionary<string, int> HighScores { get; set; } = new();

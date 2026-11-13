@@ -12,6 +12,9 @@ public sealed class SceneRenderer : IDisposable
     public static readonly Color[] LevelColors = { new(220, 90, 80, 255), new(80, 120, 240, 255), new(80, 200, 100, 255), new(230, 70, 70, 255) };
     public static readonly string[] LevelNames = { "BLACK", "BLUE", "GREEN", "RED" };
 
+    /// <summary>Design-space size of one frame; the window letterboxes it at native resolution.</summary>
+    public const int VirtualWidth = 1280, VirtualHeight = 720;
+
     public CameraRig Rig { get; }
     private readonly RoomView _room = new();
 
@@ -27,7 +30,7 @@ public sealed class SceneRenderer : IDisposable
     {
         var maze = world.Maze;
         Vector3? mysteryPos = null;
-        Raylib.BeginMode3D(Rig.Camera);
+        Rig.BeginView();
 
         int level = maze.Level(world.Room);
         Color? doorColor = world.DoorClosed && world.Obj != null ? AtariPalette.ToColor(world.Obj.Hue, world.Obj.Luma) : null;
@@ -40,6 +43,7 @@ public sealed class SceneRenderer : IDisposable
         if (world.IsPodRoom && !world.PodOpen)
         {
             // energy barriers: translucent amber slabs with bright edges
+            Rlgl.DrawRenderBatchActive();   // flush opaque geometry before depth writes are disabled
             Rlgl.DisableDepthMask();
             Raylib.BeginBlendMode(BlendMode.Additive);
             for (int i = 0; i < 2; i++)
@@ -102,11 +106,11 @@ public sealed class SceneRenderer : IDisposable
         foreach (var b in world.EnemyBullets) Raylib.DrawSphere(P(b.X, b.Y, 0.9f), 0.2f, Color.Orange);
         foreach (var b in world.Bullets) Raylib.DrawSphere(P(b.X, b.Y, 0.9f), 0.22f, Color.SkyBlue);
 
-        _room.DrawGlow(world.Grid, level, time, doorColor, doorSide);
-        Raylib.EndMode3D();
+        _room.DrawGlow(world.Grid, level, doorColor, doorSide);
+        Rig.EndView();
         if (mysteryPos is Vector3 mp)
         {
-            var sp = Raylib.GetWorldToScreen(mp, Rig.Camera);
+            var sp = Raylib.GetWorldToScreenEx(mp, Rig.Camera, VirtualWidth, VirtualHeight);
             Raylib.DrawText("?", (int)sp.X - 8, (int)sp.Y - 14, 32, Color.White);
         }
     }

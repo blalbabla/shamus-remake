@@ -40,4 +40,11 @@ public sealed class Menu
             Hud.TextCentered(sel && Items[i].OnChange == null ? "> " + label + " <" : label, top + i * step, size, col, screenW);
         }
     }
+
+    /// <summary>Opaque rounded card drawn behind a menu so the scene does not show through it.</summary>
+    public static void DrawPanel(Rectangle rec)
+    {
+        Raylib.DrawRectangleRounded(rec, 0.06f, 16, new Color(12, 12, 18, 255));
+        Raylib.DrawRectangleRoundedLinesEx(rec, 0.06f, 16, 2f, new Color(120, 100, 50, 255));
+    }
 }

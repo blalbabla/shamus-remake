@@ -20,6 +20,7 @@ dotnet run --project src/Shamus.Game
 | `--maze NAME` | лабиринт: `c64` (по умолчанию), `atari`, `holmes`, `cluseau`, `marlowe`, `bond`, `random` |
 | `--seed N` | зерно для `--maze random` |
 | `--room N` | пропустить титульный экран и начать с комнаты N |
+| `--settings` | отладка: открыть экран настроек (для скриншотов) |
 | `--mute` | отключить звук |
 | `--debug` | клавиши `[` и `]` переключают комнаты |
 | `--view top\|iso` | вид камеры: сверху или изометрия |

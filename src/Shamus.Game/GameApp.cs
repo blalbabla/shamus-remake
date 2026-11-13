@@ -8,12 +8,12 @@ using Shamus.Game.Ui;
 
 namespace Shamus.Game;
 
-public enum AppState { Title, Playing, Paused, GameOver, Map }
+public enum AppState { Title, Settings, Playing, Paused, GameOver, Map }
 
 /// <summary>Window, state machine (title / playing / paused / game over), fixed-step loop.</summary>
 public sealed class GameApp
 {
-    private const int W = 1280, H = 720;
+    private const int W = SceneRenderer.VirtualWidth, H = SceneRenderer.VirtualHeight;
     private const float Step = 1f / 60f;
 
     private static readonly string[] MazeOrder = { "c64", "atari", "holmes", "cluseau", "marlowe", "bond" };
@@ -28,6 +28,7 @@ public sealed class GameApp
     private SceneRenderer _scene = null!;
     private readonly Hud _hud = new();
     private readonly Menu _titleMenu = new(), _pauseMenu = new();
+    private readonly SettingsMenu _settingsMenu = new();
     private readonly List<string> _mazes = new();
     private readonly bool _debug;
 
@@ -78,47 +79,122 @@ public sealed class GameApp
     private void BuildMenus()
     {
         _titleMenu.Items.Add(new MenuItem { Label = () => "START GAME", OnEnter = () => StartGame(0) });
-        _titleMenu.Items.Add(new MenuItem
-        {
-            Label = () => "MAZE: " + MazeLabels.GetValueOrDefault(_settings.Maze, _settings.Maze),
-            OnChange = d => { int i = (_mazes.IndexOf(_settings.Maze) + d + _mazes.Count) % _mazes.Count; _settings.Maze = _mazes[i]; _settings.Save(); LoadDemo(); },
-        });
-        _titleMenu.Items.Add(new MenuItem
-        {
-            Label = () => _settings.Maze == "random" ? $"SEED: {_settings.Seed}  (ENTER = random)" : "SEED: -",
-            OnChange = d => { if (_settings.Maze == "random") { _settings.Seed = Math.Max(1, _settings.Seed + d); _settings.Save(); LoadDemo(); } },
-            OnEnter = () => { if (_settings.Maze == "random") { _settings.Seed = Random.Shared.Next(1, 100000); _settings.Save(); LoadDemo(); } },
-        });
-        _titleMenu.Items.Add(new MenuItem
-        {
-            Label = () => "DIFFICULTY: " + _settings.Difficulty.ToString().ToUpperInvariant(),
-            OnChange = d => { _settings.Difficulty = (Difficulty)(((int)_settings.Difficulty + d + 3) % 3); _settings.Save(); },
-        });
-        _titleMenu.Items.Add(new MenuItem
-        {
-            Label = () => "VOLUME: " + (_settings.Muted ? "OFF" : $"{(int)Math.Round(_settings.Volume * 100)}%"),
-            OnChange = d =>
-            {
-                if (_settings.Muted && d > 0) _settings.Muted = false;
-                else { _settings.Volume = Math.Clamp(_settings.Volume + d * 0.1f, 0f, 1f); _settings.Muted = _settings.Volume <= 0.001f; }
-                ApplyAudioSettings(); _settings.Save(); _audio.Play(Sfx.RoomEnter);
-            },
-        });
-        _titleMenu.Items.Add(new MenuItem
-        {
-            Label = () => "MUSIC: " + (_settings.MusicVolume <= 0.001f ? "OFF" : $"{(int)Math.Round(_settings.MusicVolume * 100)}%"),
-            OnChange = d => { _settings.MusicVolume = Math.Clamp(_settings.MusicVolume + d * 0.1f, 0f, 1f); ApplyAudioSettings(); _settings.Save(); },
-        });
-        _titleMenu.Items.Add(new MenuItem
-        {
-            Label = () => "GOD MODE: " + (_settings.GodMode ? "ON (test)" : "OFF"),
-            OnChange = _ => { _settings.GodMode = !_settings.GodMode; _settings.Save(); },
-        });
+        _titleMenu.Items.Add(new MenuItem { Label = () => "SETTINGS", OnEnter = OpenSettings });
         _titleMenu.Items.Add(new MenuItem { Label = () => "QUIT", OnEnter = () => _quit = true });
 
         _pauseMenu.Items.Add(new MenuItem { Label = () => "RESUME", OnEnter = () => _state = AppState.Playing });
         _pauseMenu.Items.Add(new MenuItem { Label = () => "RESTART", OnEnter = () => { SubmitScore(); StartGame(_startRoom); } });
         _pauseMenu.Items.Add(new MenuItem { Label = () => "MAIN MENU", OnEnter = ToTitle });
+
+        BuildSettings();
+    }
+
+    /// <summary>Settings are split into gameplay, video and audio sections; values apply immediately.</summary>
+    private void BuildSettings()
+    {
+        void Header(string title) => _settingsMenu.Rows.Add(new SettingsRow { Header = true, Label = () => title });
+
+        Header("GAMEPLAY");
+        _settingsMenu.Rows.Add(new SettingsRow
+        {
+            Label = () => "MAZE: " + MazeLabels.GetValueOrDefault(_settings.Maze, _settings.Maze),
+            Change = CycleMaze,
+            Activate = () => CycleMaze(1),
+        });
+        _settingsMenu.Rows.Add(new SettingsRow
+        {
+            Visible = () => _settings.Maze == "random",
+            Label = () => $"SEED: {_settings.Seed}   (ENTER = RANDOM)",
+            Change = d => { _settings.Seed = Math.Max(1, _settings.Seed + d); _settings.Save(); LoadDemo(); },
+            Activate = () => { _settings.Seed = Random.Shared.Next(1, 100000); _settings.Save(); LoadDemo(); },
+        });
+        _settingsMenu.Rows.Add(new SettingsRow
+        {
+            Label = () => "DIFFICULTY: " + _settings.Difficulty.ToString().ToUpperInvariant(),
+            Change = CycleDifficulty,
+            Activate = () => CycleDifficulty(1),
+        });
+        _settingsMenu.Rows.Add(new SettingsRow
+        {
+            Label = () => "GOD MODE: " + (_settings.GodMode ? "ON (test)" : "OFF"),
+            Change = _ => ToggleGodMode(),
+            Activate = ToggleGodMode,
+        });
+
+        Header("VIDEO");
+        _settingsMenu.Rows.Add(new SettingsRow
+        {
+            Label = () => "WINDOWED: " + (_settings.Fullscreen ? "OFF" : "ON"),
+            Change = _ => SetFullscreen(false),
+            Activate = () => SetFullscreen(false),
+        });
+        _settingsMenu.Rows.Add(new SettingsRow
+        {
+            Label = () => "FULLSCREEN: " + (_settings.Fullscreen ? "ON" : "OFF"),
+            Change = _ => SetFullscreen(true),
+            Activate = () => SetFullscreen(true),
+        });
+
+        Header("AUDIO");
+        _settingsMenu.Rows.Add(new SettingsRow
+        {
+            Label = () => "EFFECTS: " + (_settings.Muted ? "OFF" : $"{(int)Math.Round(_settings.Volume * 100)}%"),
+            Change = AdjustEffects,
+            Activate = () => AdjustEffects(1),
+        });
+        _settingsMenu.Rows.Add(new SettingsRow
+        {
+            Label = () => "MUSIC: " + (_settings.MusicVolume <= 0.001f ? "OFF" : $"{(int)Math.Round(_settings.MusicVolume * 100)}%"),
+            Change = AdjustMusic,
+            Activate = () => AdjustMusic(1),
+        });
+
+        _settingsMenu.Rows.Add(new SettingsRow { Label = () => "BACK", Activate = CloseSettings });
+    }
+
+    private void OpenSettings() { _settingsMenu.Reset(); _state = AppState.Settings; }
+    private void CloseSettings() { _state = AppState.Title; _titleMenu.Reset(); }
+
+    private void CycleMaze(int d)
+    {
+        int i = (_mazes.IndexOf(_settings.Maze) + d + _mazes.Count) % _mazes.Count;
+        _settings.Maze = _mazes[i];
+        _settings.Save();
+        LoadDemo();   // keep the map and demo world in sync with the chosen maze
+    }
+
+    private void CycleDifficulty(int d)
+    {
+        _settings.Difficulty = (Difficulty)(((int)_settings.Difficulty + d + 3) % 3);
+        _settings.Save();
+    }
+
+    private void ToggleGodMode() { _settings.GodMode = !_settings.GodMode; _settings.Save(); }
+
+    private void AdjustEffects(int d)
+    {
+        if (_settings.Muted && d > 0) _settings.Muted = false;
+        else
+        {
+            _settings.Volume = Math.Clamp(_settings.Volume + d * 0.1f, 0f, 1f);
+            _settings.Muted = _settings.Volume <= 0.001f;
+        }
+        ApplyAudioSettings(); _settings.Save(); _audio.Play(Sfx.RoomEnter, 0.6f);
+    }
+
+    private void AdjustMusic(int d)
+    {
+        _settings.MusicVolume = Math.Clamp(_settings.MusicVolume + d * 0.1f, 0f, 1f);
+        ApplyAudioSettings(); _settings.Save();
+    }
+
+    /// <summary>Switches between the resizable window and fullscreen; the frame keeps its 16:9 letterbox either way.</summary>
+    private void SetFullscreen(bool on)
+    {
+        if (_settings.Fullscreen == on) return;
+        _settings.Fullscreen = on;
+        _settings.Save();
+        if (Raylib.IsWindowState(ConfigFlags.FullscreenMode) != on) Raylib.ToggleFullscreen();
     }
 
     private void ApplyAudioSettings() { _audio.Muted = _settings.Muted || _args.Contains("--mute"); _audio.Volume = _settings.Volume; _audio.MusicVolume = _settings.MusicVolume; }
@@ -135,6 +211,7 @@ public sealed class GameApp
     {
         _maze = LoadMaze();
         _config = BuildConfig();
+        _map = MapLayout.Load(Path.Combine(AppContext.BaseDirectory, "assets", "maps"), _maze);
         _startRoom = room;
         _world = new GameWorld(_maze, _config, room);
         _acc = 0; _gameOverTimer = 0; _newHigh = false;
@@ -148,10 +225,16 @@ public sealed class GameApp
     public void Run()
     {
         LoadMazeList();
-        Raylib.SetConfigFlags(ConfigFlags.Msaa4xHint);
+        Raylib.SetConfigFlags(ConfigFlags.Msaa4xHint | ConfigFlags.ResizableWindow);
         Raylib.InitWindow(W, H, "Shamus 3D");
+        Raylib.SetWindowMinSize(640, 360);
         Raylib.SetExitKey(KeyboardKey.Null);
         Raylib.SetTargetFPS(60);
+        if (Arg("--winsize") is { Length: > 0 } ws)
+        {
+            var parts = ws.Split('x');
+            if (parts.Length == 2 && int.TryParse(parts[0], out int ww) && int.TryParse(parts[1], out int wh)) Raylib.SetWindowSize(ww, wh);
+        }
         _scene = new SceneRenderer(_settings.View);
         string view = Arg("--view");
         if (view is "top" or "iso") _scene.Rig.SetMode(view == "iso" ? ViewMode.Isometric : ViewMode.Top, instant: true);
@@ -165,17 +248,49 @@ public sealed class GameApp
         _audio.Init();
         ApplyAudioSettings();
         BuildMenus();
-        _titleMenu.OnMove = _pauseMenu.OnMove = () => _audio.Play(Sfx.RoomEnter, 0.6f);
+        _titleMenu.OnMove = _pauseMenu.OnMove = _settingsMenu.OnMove = () => _audio.Play(Sfx.RoomEnter, 0.6f);
         LoadDemo();
+        if (_settings.Fullscreen) Raylib.ToggleFullscreen();
+        if (_args.Contains("--settings")) OpenSettings();   // debug: start on the settings screen (screenshots)
         if (Arg("--room") is { Length: > 0 } r && int.TryParse(r, out int room)) StartGame(room);
 
         while (!Raylib.WindowShouldClose() && !_quit)
         {
             float dt = Raylib.GetFrameTime();
             Update(dt);
+
             Raylib.BeginDrawing();
-            Raylib.ClearBackground(new Color(8, 8, 14, 255));
+            Rlgl.DisableScissorTest();
+            Raylib.ClearBackground(Color.Black);
+
+            // Render at the window's native resolution, letterboxed to the fixed 16:9 design space
+            // (so MSAA stays active and fullscreen uses the display resolution).
+            int sw = Raylib.GetScreenWidth(), sh = Raylib.GetScreenHeight();
+            float scale = MathF.Min(sw / (float)W, sh / (float)H);
+            int vw = (int)MathF.Round(W * scale), vh = (int)MathF.Round(H * scale);
+            if (vw < 1 || vh < 1) { Raylib.EndDrawing(); continue; }   // minimized window
+            int vx = (sw - vw) / 2, vy = (sh - vh) / 2, glY = sh - vy - vh;
+            Rlgl.Viewport(vx, glY, vw, vh);
+            Rlgl.EnableScissorTest();
+            Rlgl.Scissor(vx, glY, vw, vh);
+
+            // 2D UI stays in 1280x720 coordinates and is scaled into the viewport
+            Rlgl.MatrixMode(MatrixMode.Projection);
+            Rlgl.PushMatrix();
+            Rlgl.LoadIdentity();
+            Rlgl.MultMatrixf(Raymath.MatrixOrtho(0, W, H, 0, 0, 1));
+            Rlgl.MatrixMode(MatrixMode.ModelView);
+            Rlgl.LoadIdentity();
+
+            Raylib.DrawRectangle(0, 0, W, H, new Color(8, 8, 14, 255));   // game backdrop inside the bars
             Draw(dt);
+
+            Rlgl.DrawRenderBatchActive();
+            Rlgl.MatrixMode(MatrixMode.Projection);
+            Rlgl.PopMatrix();
+            Rlgl.MatrixMode(MatrixMode.ModelView);
+            Rlgl.LoadIdentity();
+            Rlgl.DisableScissorTest();
             Raylib.EndDrawing();
             if (shot.Length > 0 && ++frame == 8)   // debug: save one frame and quit
             {
@@ -208,6 +323,11 @@ public sealed class GameApp
             case AppState.Title:
                 _titleMenu.Update();
                 if (Raylib.IsKeyPressed(KeyboardKey.Escape)) _quit = true;
+                break;
+
+            case AppState.Settings:
+                _settingsMenu.Update();
+                if (Raylib.IsKeyPressed(KeyboardKey.Escape)) CloseSettings();
                 break;
 
             case AppState.Map:
@@ -263,7 +383,7 @@ public sealed class GameApp
         float tension = 0, muffle = 0;
         switch (_state)
         {
-            case AppState.Title: muffle = 0.55f; break;
+            case AppState.Title: case AppState.Settings: muffle = 0.55f; break;
             case AppState.Paused: case AppState.Map: muffle = 0.8f; tension = 0.1f; break;
             case AppState.GameOver: muffle = 0.7f; break;
             default:
@@ -277,18 +397,32 @@ public sealed class GameApp
     private void Draw(float dt)
     {
         float alpha = _state == AppState.Playing ? _acc / Step : 1f;
-        _scene.Draw(_world, _config, alpha);
+        if (_state is not (AppState.Title or AppState.Settings)) _scene.Draw(_world, _config, alpha);
 
         switch (_state)
         {
             case AppState.Title:
-                Raylib.DrawRectangle(0, 0, W, H, new Color(0, 0, 0, 150));
-                Hud.TextCentered("SHAMUS 3D", 70, 96, Color.Gold);
-                Hud.TextCentered("a spiritual successor to the 1982 classic", 175, 24, Color.LightGray);
-                _titleMenu.Draw(270, W);
-                Hud.TextCentered("UP/DOWN select    LEFT/RIGHT change    ENTER confirm", H - 110, 20, Color.Gray);
-                Hud.TextCentered($"HIGH SCORE ({MazeLabels.GetValueOrDefault(_settings.Maze, _settings.Maze)}): {_settings.HighScore(_settings.Maze):D6}", H - 70, 22, Color.Gold);
+            {
+                // no level behind the title: a single opaque rounded card holds the whole menu
+                const int pw = 680, ph = 480, px = (W - pw) / 2, py = 120;
+                Menu.DrawPanel(new Rectangle(px, py, pw, ph));
+                Hud.TextCentered("SHAMUS 3D", py + 30, 84, Color.Gold);
+                Hud.TextCentered("a spiritual successor to the 1982 classic", py + 132, 22, Color.LightGray);
+                _titleMenu.Draw(py + 180, W, 30, 50);
+                Hud.TextCentered("UP/DOWN select    ENTER confirm", py + 356, 20, Color.Gray);
+                Hud.TextCentered($"HIGH SCORE ({MazeLabels.GetValueOrDefault(_settings.Maze, _settings.Maze)}): {_settings.HighScore(_settings.Maze):D6}", py + 390, 22, Color.Gold);
                 break;
+            }
+
+            case AppState.Settings:
+            {
+                const int pw = 760, ph = 640, px = (W - pw) / 2, py = 40;
+                Menu.DrawPanel(new Rectangle(px, py, pw, ph));
+                Hud.TextCentered("SETTINGS", py + 22, 48, Color.Gold);
+                _settingsMenu.Draw(py + 100, W, 28, 40, 22);
+                Hud.TextCentered("UP/DOWN select    LEFT/RIGHT change    ENTER change    ESC back", py + ph - 40, 18, Color.Gray);
+                break;
+            }
 
             case AppState.Playing:
                 _hud.Draw(_world, _maze.Name, _settings.HighScore(_settings.Maze), W, H, _world.TickCount < 600);
@@ -299,11 +433,16 @@ public sealed class GameApp
                 break;
 
             case AppState.Paused:
+            {
                 _hud.Draw(_world, _maze.Name, _settings.HighScore(_settings.Maze), W, H, false);
-                Raylib.DrawRectangle(0, 0, W, H, new Color(0, 0, 0, 170));
-                Hud.TextCentered("PAUSED", 190, 72, Color.Gold);
-                _pauseMenu.Draw(310, W);
+                Raylib.DrawRectangle(0, 0, W, H, new Color(0, 0, 0, 140));
+                const int pw = 520, ph = 340, px = (W - pw) / 2, py = 190;
+                Menu.DrawPanel(new Rectangle(px, py, pw, ph));
+                Hud.TextCentered("PAUSED", py + 34, 60, Color.Gold);
+                _pauseMenu.Draw(py + 130, W, 32, 54);
+                Hud.TextCentered("ESC / P resume", py + 296, 20, Color.Gray);
                 break;
+            }
 
             case AppState.GameOver:
                 Raylib.DrawRectangle(0, 0, W, H, new Color(0, 0, 0, 190));
