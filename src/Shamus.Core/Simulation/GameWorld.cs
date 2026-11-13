@@ -2,7 +2,7 @@ using Shamus.Core.Mazes;
 
 namespace Shamus.Core.Simulation;
 
-public enum GamePhase { Playing, Dying, GameOver }
+public enum GamePhase { Playing, Dying, GameOver, Won }
 
 public sealed class Bullet
 {
@@ -32,6 +32,14 @@ public sealed class GameWorld
     public int Score { get; private set; }
     public bool RoomCleared { get; private set; }
     private readonly Random _rng;
+
+    // Shadow: relentless, invulnerable chaser that appears when you linger in a room.
+    public bool ShadowActive { get; private set; }
+    public float ShadowX { get; private set; }
+    public float ShadowY { get; private set; }
+    public bool ShadowWarned { get; private set; }
+    public int Cycle { get; private set; }               // completed loops of the maze
+    private int _roomTicks, _winLeft;
 
     // objects, keys and doors
     public RoomObject? Obj { get; private set; }
@@ -74,13 +82,16 @@ public sealed class GameWorld
         Events.Add(new WorldEvent(WorldEventKind.RoomEntered, x, y, Room));
         SpawnObject();
         SpawnEnemies();
+        ResetShadow();
     }
+
+    private void ResetShadow() { ShadowActive = false; ShadowWarned = false; _roomTicks = 0; }
 
     private void SpawnObject()
     {
         Obj = null; DoorSide = 0; DoorClosed = false;
         var kind = Maze.Object(Room);
-        if (kind == ObjectKind.None || kind == ObjectKind.Shadow) return;
+        if (kind == ObjectKind.None || (kind == ObjectKind.Shadow && !IsPodRoom)) return;
         if (IsPodRoom)
         {   // the pod target is the room's object; position fixed in the centre
             Obj = new RoomObject { Kind = kind, X = Config.PodTargetX, Y = Config.PodTargetY, KeyId = Maze.KeyId(Room), Hue = Maze.ObjectHue(Room), Luma = Maze.ObjectLuma(Room) };
@@ -207,6 +218,7 @@ public sealed class GameWorld
         Events.Clear();
         TickCount++;
         if (Phase == GamePhase.GameOver) return;
+        if (Phase == GamePhase.Won) { if (--_winLeft <= 0) NextCycle(); return; }
         if (Phase == GamePhase.Dying)
         {
             if (--_dyingLeft <= 0)
@@ -215,6 +227,7 @@ public sealed class GameWorld
                 PlayerX = PrevPlayerX = _entryX;
                 PlayerY = PrevPlayerY = _entryY;
                 Bullets.Clear();
+                ResetShadow();
                 SpawnEnemies(); // a fresh random set of enemies, as on entering the room
             }
             return;
@@ -230,6 +243,7 @@ public sealed class GameWorld
         UpdateBullets();
         UpdateEnemies();
         if (Phase == GamePhase.Playing) UpdateEnemyBullets();
+        if (Phase == GamePhase.Playing) UpdateShadow();
     }
 
     private void KillEnemy(Enemy e)
@@ -283,7 +297,7 @@ public sealed class GameWorld
     private void UpdateEnemies()
     {
         int level = Maze.Level(Room);
-        float spd = 1f + 0.25f * level;
+        float spd = (1f + 0.25f * level) * (1f + Config.CycleEnemySpeedBonus * Cycle);
         foreach (var e in Enemies)
         {
             if (!e.Alive) continue;
@@ -428,6 +442,7 @@ public sealed class GameWorld
                     {
                         PodOpen = true; dead = true;
                         Events.Add(new WorldEvent(WorldEventKind.PodOpened, b.X, b.Y));
+                        if (Room == MazeData.RoomCount - 1) Win();
                         break;
                     }
                     if (InBarrier(b.X, b.Y)) { dead = true; Events.Add(new WorldEvent(WorldEventKind.BulletHitBarrier, b.X, b.Y)); break; }
@@ -453,6 +468,83 @@ public sealed class GameWorld
             }
             if (dead) Bullets.RemoveAt(i);
         }
+    }
+
+    private bool CellFree(int x, int y) => x >= 0 && y >= 0 && x < RoomGrid.W && y < RoomGrid.H && OpenArea(x + 0.5f, y + 0.5f, 0.4f);
+
+    /// <summary>Centre of the neighbouring cell that is one step closer (by BFS) to the player.</summary>
+    private (float, float) NextWaypoint()
+    {
+        int px = Math.Clamp((int)PlayerX, 0, RoomGrid.W - 1), py = Math.Clamp((int)PlayerY, 0, RoomGrid.H - 1);
+        int sx = Math.Clamp((int)ShadowX, 0, RoomGrid.W - 1), sy = Math.Clamp((int)ShadowY, 0, RoomGrid.H - 1);
+        var dist = new int[RoomGrid.W, RoomGrid.H];
+        for (int x = 0; x < RoomGrid.W; x++) for (int y = 0; y < RoomGrid.H; y++) dist[x, y] = -1;
+        var q = new Queue<(int, int)>();
+        dist[px, py] = 0; q.Enqueue((px, py));
+        int[] ox = { 1, -1, 0, 0 }, oy = { 0, 0, 1, -1 };
+        while (q.Count > 0)
+        {
+            var (cx, cy) = q.Dequeue();
+            for (int k = 0; k < 4; k++)
+            {
+                int nx = cx + ox[k], ny = cy + oy[k];
+                if (nx < 0 || ny < 0 || nx >= RoomGrid.W || ny >= RoomGrid.H || dist[nx, ny] >= 0 || !CellFree(nx, ny)) continue;
+                dist[nx, ny] = dist[cx, cy] + 1; q.Enqueue((nx, ny));
+            }
+        }
+        if (dist[sx, sy] < 0) return (PlayerX, PlayerY);
+        int bx = sx, by = sy, bd = dist[sx, sy];
+        for (int k = 0; k < 4; k++)
+        {
+            int nx = sx + ox[k], ny = sy + oy[k];
+            if (nx < 0 || ny < 0 || nx >= RoomGrid.W || ny >= RoomGrid.H) continue;
+            if (dist[nx, ny] >= 0 && dist[nx, ny] < bd) { bd = dist[nx, ny]; bx = nx; by = ny; }
+        }
+        return (bx + 0.5f, by + 0.5f);
+    }
+
+    private void Win()
+    {
+        Phase = GamePhase.Won; _winLeft = Config.WinTicks;
+        Score += Config.ShadowKillPoints; Obj = null;
+        Events.Add(new WorldEvent(WorldEventKind.ShadowKilled, Config.PodTargetX, Config.PodTargetY));
+    }
+
+    private void NextCycle()
+    {
+        Cycle++;
+        _taken.Clear(); _unlocked.Clear();
+        Phase = GamePhase.Playing;
+        EnterRoom(1, 1.5f, 11f);
+        Events.Add(new WorldEvent(WorldEventKind.CycleStarted, 0, 0, Cycle));
+    }
+
+    private void UpdateShadow()
+    {
+        if (IsPodRoom) return;
+        _roomTicks++;
+        if (!ShadowWarned && _roomTicks >= Config.ShadowWarningTicks) { ShadowWarned = true; Events.Add(new WorldEvent(WorldEventKind.ShadowWarning)); }
+        if (!ShadowActive && _roomTicks >= Config.ShadowDelayTicks)
+        {
+            ShadowActive = true;
+            ShadowX = PlayerX < RoomGrid.W / 2f ? RoomGrid.W - 1.5f : 1.5f; ShadowY = 11f;
+            Events.Add(new WorldEvent(WorldEventKind.ShadowAppeared, ShadowX, ShadowY));
+        }
+        if (!ShadowActive) return;
+        float dx = PlayerX - ShadowX, dy = PlayerY - ShadowY;
+        float v = Config.PlayerSpeed * Config.ShadowSpeedFactor * (1f + 0.1f * Math.Min(Cycle, 4));
+        float len = MathF.Sqrt(dx * dx + dy * dy) + 0.0001f;
+        // path around walls: follow a BFS distance field towards the player's cell
+        var (tx, ty) = len < 2f ? (PlayerX, PlayerY) : NextWaypoint();
+        float wx = tx - ShadowX, wy = ty - ShadowY, wl = MathF.Sqrt(wx * wx + wy * wy) + 0.0001f;
+        float nx = ShadowX + wx / wl * v, ny = ShadowY + wy / wl * v;
+        if (OpenArea(nx, ShadowY, 0.35f)) ShadowX = nx;
+        if (OpenArea(ShadowX, ny, 0.35f)) ShadowY = ny;
+        // invulnerable: player bullets are absorbed
+        for (int i = Bullets.Count - 1; i >= 0; i--)
+            if ((Bullets[i].X - ShadowX) * (Bullets[i].X - ShadowX) + (Bullets[i].Y - ShadowY) * (Bullets[i].Y - ShadowY) < 0.6f * 0.6f)
+            { Events.Add(new WorldEvent(WorldEventKind.BulletHitShadow, Bullets[i].X, Bullets[i].Y)); Bullets.RemoveAt(i); }
+        if (len < 0.7f) Die();
     }
 
     private void Die()

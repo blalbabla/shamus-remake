@@ -200,3 +200,43 @@ public class RespawnTests
         Assert.All(w.Enemies, e => Assert.DoesNotContain(e, before));
     }
 }
+
+public class ShadowTests
+{
+    static MazeData Maze()
+    {
+        var d = new DirectoryInfo(AppContext.BaseDirectory);
+        while (!Directory.Exists(Path.Combine(d.FullName, "assets", "mazes"))) d = d.Parent!;
+        return MazeLoader.Load(Path.Combine(d.FullName, "assets", "mazes", "c64.maze"));
+    }
+
+    [Fact]
+    public void ShadowAppearsAndCatchesLingeringPlayer()
+    {
+        var w = new GameWorld(Maze(), new GameConfig { ShadowWarningTicks = 5, ShadowDelayTicks = 10, StartLives = 3 }, 0);
+        w.Enemies.Clear();
+        bool warned = false, appeared = false;
+        for (int i = 0; i < 900 && w.Lives == 3; i++)
+        {
+            w.Enemies.Clear();
+            w.Tick(new InputState(0, 0, false));
+            warned |= w.Events.Any(e => e.Kind == WorldEventKind.ShadowWarning);
+            appeared |= w.Events.Any(e => e.Kind == WorldEventKind.ShadowAppeared);
+        }
+        Assert.True(warned); Assert.True(appeared);
+        Assert.Equal(2, w.Lives);
+    }
+
+    [Fact]
+    public void KillingShadowInLastRoomStartsNewCycle()
+    {
+        var w = new GameWorld(Maze(), new GameConfig(), 127);
+        Assert.True(w.IsPodRoom);
+        for (int i = 0; i < 8000 && w.Phase != GamePhase.Won; i++) w.Tick(new InputState(0, 0, true));
+        Assert.Equal(GamePhase.Won, w.Phase);
+        for (int i = 0; i < 400 && w.Phase == GamePhase.Won; i++) w.Tick(new InputState(0, 0, false));
+        Assert.Equal(GamePhase.Playing, w.Phase);
+        Assert.Equal(1, w.Cycle);
+        Assert.Equal(1, w.Room);
+    }
+}

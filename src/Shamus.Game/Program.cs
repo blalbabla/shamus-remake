@@ -107,6 +107,12 @@ while (!Raylib.WindowShouldClose())
                 Raylib.DrawSphere(op + new Vector3(0, bob, 0), 0.45f, oc.A == 0 ? Color.Lime : new Color(120, 230, 150, 255));
                 Raylib.DrawCylinder(op + new Vector3(0, 0.3f + bob, 0), 0.12f, 0.12f, 0.6f, 8, Color.LightGray);
                 break;
+            case ObjectKind.Shadow:
+                Raylib.DrawCylinder(op + new Vector3(0, -0.3f, 0), 0.5f, 0.7f, 1.8f, 10, new Color(40, 20, 60, 255));
+                Raylib.DrawSphere(op + new Vector3(0, 1.0f, 0), 0.5f, new Color(25, 10, 40, 255));
+                Raylib.DrawCube(op + new Vector3(-0.18f, 1.05f, 0.4f), 0.15f, 0.08f, 0.05f, Color.Red);
+                Raylib.DrawCube(op + new Vector3(0.18f, 1.05f, 0.4f), 0.15f, 0.08f, 0.05f, Color.Red);
+                break;
             case ObjectKind.Mystery:
                 Raylib.DrawCube(op + new Vector3(0, bob, 0), 0.9f, 0.9f, 0.9f, new Color(150, 80, 220, 255));
                 mysteryPos = op + new Vector3(0, 1.0f, 0);
@@ -164,6 +170,14 @@ while (!Raylib.WindowShouldClose())
                 break;
         }
     }
+    if (world.ShadowActive)
+    {
+        var sp = P(world.ShadowX, world.ShadowY, 0.9f);
+        Raylib.DrawCylinder(sp + new Vector3(0, -0.9f, 0), 0.45f, 0.65f, 1.8f, 10, new Color(30, 15, 50, 255));
+        Raylib.DrawSphere(sp + new Vector3(0, 1.0f, 0), 0.45f, new Color(20, 8, 35, 255));
+        Raylib.DrawCube(sp + new Vector3(-0.16f, 1.05f, 0.38f), 0.14f, 0.08f, 0.05f, Color.Red);
+        Raylib.DrawCube(sp + new Vector3(0.16f, 1.05f, 0.38f), 0.14f, 0.08f, 0.05f, Color.Red);
+    }
     foreach (var b in world.EnemyBullets)
         Raylib.DrawSphere(P(b.X, b.Y, 0.9f), 0.2f, Color.Orange);
     foreach (var b in world.Bullets)
@@ -179,6 +193,10 @@ while (!Raylib.WindowShouldClose())
         Raylib.DrawRectangle(12 + i * 26, 104, 22, 22, AtariPalette.ToColor(world.Keys[i] & 0x0F, (world.Keys[i] >> 4) & 0x0E));
     Raylib.DrawText($"{maze.Name}  room {world.Room}  level {maze.Level(world.Room) + 1}  {maze.Kind(world.Room)}", 12, 10, 24, Color.White);
     Raylib.DrawText($"lives {world.Lives}   score {world.Score}   enemies {world.Enemies.Count}" + (world.Phase == GamePhase.GameOver ? "   GAME OVER (R)" : ""), 12, 40, 24, Color.Yellow);
+    if (world.ShadowWarned && !world.ShadowActive && !world.IsPodRoom && (world.TickCount / 20) % 2 == 0)
+        Raylib.DrawText("!! SHADOW APPROACHES !!", 470, 40, 28, Color.Red);
+    if (world.Phase == GamePhase.Won) Raylib.DrawText("SHADOW DEFEATED", 500, 330, 40, Color.Gold);
+    if (world.Cycle > 0) Raylib.DrawText($"loop {world.Cycle + 1}", 12, 130, 18, Color.Gray);
     Raylib.DrawText("WASD move   Space fire   [ ] room   R restart   F5 reload assets/config.json", 12, 72, 18, Color.Gray);
     Raylib.EndDrawing();
 }

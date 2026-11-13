@@ -19,6 +19,12 @@ public sealed class GameConfig
     public int BonusMin { get; init; } = 250;
     public int BonusMax { get; init; } = 1000;
     public float PickupRadius { get; init; } = 0.9f;
+    public int ShadowWarningTicks { get; init; } = 600;   // time in a room before the warning
+    public int ShadowDelayTicks { get; init; } = 900;     // time in a room before the Shadow shows up
+    public float ShadowSpeedFactor { get; init; } = 0.85f; // relative to the player's speed
+    public int ShadowKillPoints { get; init; } = 5000;
+    public int WinTicks { get; init; } = 180;
+    public float CycleEnemySpeedBonus { get; init; } = 0.2f;
     public int Seed { get; init; } = 1;
     public float EnemyRadius { get; init; } = 0.5f;
     public float EnemyBulletSpeed { get; init; } = 0.28f;
