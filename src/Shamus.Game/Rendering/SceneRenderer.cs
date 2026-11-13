@@ -106,7 +106,7 @@ public sealed class SceneRenderer : IDisposable
         foreach (var b in world.EnemyBullets) Raylib.DrawSphere(P(b.X, b.Y, 0.9f), 0.2f, Color.Orange);
         foreach (var b in world.Bullets) Raylib.DrawSphere(P(b.X, b.Y, 0.9f), 0.22f, Color.SkyBlue);
 
-        _room.DrawGlow(world.Grid, level, doorColor, doorSide);
+        _room.DrawBeamShells(world.Grid, level, doorColor, doorSide);
         Rig.EndView();
         if (mysteryPos is Vector3 mp)
         {

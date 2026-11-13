@@ -107,35 +107,38 @@ public sealed class RoomView : IDisposable
             Raylib.DrawCube(P(x, y, 1.68f), 0.4f, 0.1f, 0.4f, Brighten(neon, 0.75f + 0.25f * pulse));   // solid neon cap
         }
 
-        int i = 0;
         foreach (var s in walls.Segments)
         {
             var col = IsDoor(s, doorSide) && doorColor is Color dc ? dc : neon;
             foreach (float h in BeamHeights)
-            {
-                Beam(s, h, 0.20f, Brighten(col, pulse), 1f);       // neon body
-                Beam(s, h, 0.08f, Color.White, 1f);               // hot core
-            }
-            i++;
+                Beam(s, h, 0.20f, Brighten(col, pulse), 1f);      // pass 1: bright central beam
         }
     }
 
-    /// <summary>Additive glow around the beams and posts; draw last, after all opaque geometry.</summary>
-    public void DrawGlow(RoomGrid grid, int level, Color? doorColor, int doorSide)
+    /// <summary>
+    /// Beam passes 2 and 3: a wider semi-transparent body and a very wide, partially transparent halo.
+    /// Drawn additively with depth writes off (after flushing the opaque batch) so the light does not occlude solids.
+    /// </summary>
+    public void DrawBeamShells(RoomGrid grid, int level, Color? doorColor, int doorSide)
     {
         var neon = Neon[Math.Clamp(level, 0, 3)];
         var walls = grid.Walls;
         // Flush the queued opaque geometry (posts, beams, floor) while depth writes are still on.
         // DisableDepthMask only changes GL state and does not flush raylib's batch: without this call
-        // the posts would be rasterised with depth writes off, so the additive glow would draw over them.
+        // the posts would be rasterised with depth writes off, so the glow would draw over them.
         Rlgl.DrawRenderBatchActive();
         Rlgl.DisableDepthMask();
         Raylib.BeginBlendMode(BlendMode.Additive);
         foreach (var s in walls.Segments)
         {
             var col = IsDoor(s, doorSide) && doorColor is Color dc ? dc : neon;
-            var glow = new Color(col.R, col.G, col.B, (byte)120);
-            foreach (float h in BeamHeights) Beam(s, h, 0.70f, glow, 1f);
+            var body = new Color(col.R, col.G, col.B, (byte)150);
+            var halo = new Color(col.R, col.G, col.B, (byte)40);
+            foreach (float h in BeamHeights)
+            {
+                Beam(s, h, 0.32f, body, 1f);   // pass 2: less bright, thicker, semi-transparent
+                Beam(s, h, 0.40f, halo, 1f);   // pass 3: thick, almost transparent
+            }
         }
         Raylib.EndBlendMode();
         Rlgl.EnableDepthMask();
