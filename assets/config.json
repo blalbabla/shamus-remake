@@ -1,6 +1,7 @@
 {
   "StartLives": 5,
-  "PlayerSpeed": 0.2,
+  "PlayerSpeed": 0.133,
+  "DroneShooterChance": 0.5,
   "PlayerRadius": 0.4,
   "BulletSpeed": 0.6,
   "MaxBullets": 3,

@@ -90,6 +90,8 @@ public sealed class GameWorld
             int kinds = level == 0 ? 2 : 3;
             Enemies.Add(new Enemy { Kind = (EnemyKind)_rng.Next(kinds), X = x, Y = y, Phase = (float)_rng.NextDouble() * 6.28f,
                                     ShotCooldown = 30 + _rng.Next(Config.EnemyShotCooldown) });
+            var ne = Enemies[^1];
+            if (ne.Kind == EnemyKind.SpiralDrone) ne.CanShoot = _rng.NextDouble() < Config.DroneShooterChance;
         }
         if (Enemies.Count == 0) RoomCleared = true;
     }
@@ -244,7 +246,7 @@ public sealed class GameWorld
 
             // shooting when roughly lined up with the player
             if (e.ShotCooldown > 0) e.ShotCooldown--;
-            else if (EnemyBullets.Count < 3 + level && dist < 26f)
+            else if (e.CanShoot && EnemyBullets.Count < 3 + level && dist < 26f)
             {
                 float v = Config.EnemyBulletSpeed;
                 bool aligned = MathF.Abs(dx) < 1f || MathF.Abs(dy) < 1f;
