@@ -1,0 +1,23 @@
+{
+  "StartLives": 5,
+  "PlayerSpeed": 0.2,
+  "PlayerRadius": 0.4,
+  "BulletSpeed": 0.6,
+  "MaxBullets": 3,
+  "FireCooldown": 8,
+  "WallsKill": true,
+  "DeathTicks": 60,
+  "Seed": 1,
+  "EnemyRadius": 0.5,
+  "EnemyBulletSpeed": 0.28,
+  "EnemyShotCooldown": 90,
+  "ClearedSpeedBonus": 1.25,
+  "MinSpawnDistance": 10,
+  "PodBarrierX0": [15.5, 23.5],
+  "PodBarrierWidth": 2,
+  "PodSlitHeight": 2.5,
+  "PodSlitSpeed": 0.08,
+  "PodTargetX": 20.5,
+  "PodTargetY": 11,
+  "PodTargetRadius": 1.1
+}

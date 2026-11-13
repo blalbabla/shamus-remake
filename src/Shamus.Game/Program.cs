@@ -8,7 +8,17 @@ using Shamus.Core.Simulation;
 var mazeName = args.Length > 0 ? args[0] : "c64";
 int startRoom = args.Length > 1 ? int.Parse(args[1]) : 0;
 var maze = MazeLoader.Load(Path.Combine(AppContext.BaseDirectory, "assets", "mazes", mazeName + ".maze"));
-var config = new GameConfig();
+// Tunable constants live in assets/config.json (source copy preferred, so F5 picks up edits without rebuild).
+string ConfigPath()
+{
+    for (var d = new DirectoryInfo(AppContext.BaseDirectory); d != null; d = d.Parent)
+    {
+        var p = Path.Combine(d.FullName, "assets", "config.json");
+        if (File.Exists(p) && Directory.Exists(Path.Combine(d.FullName, "src"))) return p;
+    }
+    return Path.Combine(AppContext.BaseDirectory, "assets", "config.json");
+}
+var config = GameConfig.Load(ConfigPath());
 var world = new GameWorld(maze, config, startRoom);
 
 Raylib.InitWindow(1280, 720, "Shamus 3D");
@@ -34,6 +44,7 @@ while (!Raylib.WindowShouldClose())
     if (Raylib.IsKeyPressed(KeyboardKey.RightBracket)) world = new GameWorld(maze, config, world.Room + 1);
     if (Raylib.IsKeyPressed(KeyboardKey.LeftBracket)) world = new GameWorld(maze, config, world.Room - 1);
     if (Raylib.IsKeyPressed(KeyboardKey.R)) world = new GameWorld(maze, config, startRoom);
+    if (Raylib.IsKeyPressed(KeyboardKey.F5)) { config = GameConfig.Load(ConfigPath()); world = new GameWorld(maze, config, world.Room); }
 
     int mx = 0, my = 0;
     if (Raylib.IsKeyDown(KeyboardKey.A) || Raylib.IsKeyDown(KeyboardKey.Left)) mx--;
@@ -129,7 +140,7 @@ while (!Raylib.WindowShouldClose())
     Raylib.EndMode3D();
     Raylib.DrawText($"{maze.Name}  room {world.Room}  level {maze.Level(world.Room) + 1}  {maze.Kind(world.Room)}", 12, 10, 24, Color.White);
     Raylib.DrawText($"lives {world.Lives}   score {world.Score}   enemies {world.Enemies.Count}" + (world.Phase == GamePhase.GameOver ? "   GAME OVER (R)" : ""), 12, 40, 24, Color.Yellow);
-    Raylib.DrawText("WASD move   Space fire   [ ] room   R restart", 12, 72, 18, Color.Gray);
+    Raylib.DrawText("WASD move   Space fire   [ ] room   R restart   F5 reload assets/config.json", 12, 72, 18, Color.Gray);
     Raylib.EndDrawing();
 }
 Raylib.CloseWindow();

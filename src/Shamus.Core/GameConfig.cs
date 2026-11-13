@@ -1,3 +1,5 @@
+using System.Text.Json;
+
 namespace Shamus.Core;
 
 /// <summary>Gameplay constants. Units: room cells (RoomGrid.W x RoomGrid.H), time: ticks at 60 Hz.</summary>
@@ -27,4 +29,12 @@ public sealed class GameConfig
     public float PodTargetX { get; init; } = 20.5f;
     public float PodTargetY { get; init; } = 11f;
     public float PodTargetRadius { get; init; } = 1.1f;
+
+    static readonly JsonSerializerOptions Json = new() { WriteIndented = true, IncludeFields = false };
+
+    /// <summary>Loads overrides from a JSON file; missing file or fields keep defaults.</summary>
+    public static GameConfig Load(string path) =>
+        File.Exists(path) ? JsonSerializer.Deserialize<GameConfig>(File.ReadAllText(path), Json) ?? new GameConfig() : new GameConfig();
+
+    public string ToJson() => JsonSerializer.Serialize(this, Json);
 }
