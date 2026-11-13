@@ -46,6 +46,15 @@ public sealed class MazeData
     /// <summary>Last room of levels 1..3 (Atari convention; level 4 ends at room 127).</summary>
     public IReadOnlyList<int> LevelEnds => new[] { (int)_d[512 + 0x7D], _d[512 + 0x7E], _d[512 + 0x7F] };
 
+    /// <summary>Atari hue 0..15 of the object colour (lower nibble).</summary>
+    public int ObjectHue(int room) => ColorByte(room) & 0x0F;
+    /// <summary>Atari luminance 0..14 (bits 5-7 of the colour byte, expanded format).</summary>
+    public int ObjectLuma(int room) => (ColorByte(room) >> 4) & 0x0E;
+    /// <summary>Key/keyhole matching id: colour byte without the door-side bit.</summary>
+    public int KeyId(int room) => ColorByte(room) & 0xEF;
+    /// <summary>For keyhole rooms: true if the left exit is closed (bit 4), otherwise the right exit.</summary>
+    public bool DoorOnLeft(int room) => (ColorByte(room) & 0x10) != 0;
+
     public bool IsCorridor(int room) => (Horizontal(room) & 0x80) != 0;
     public bool IsPod(int room) => PodRooms.Contains(room);
     public RoomKind Kind(int room) => IsPod(room) ? RoomKind.Pod : IsCorridor(room) ? RoomKind.Corridor : RoomKind.Chamber;

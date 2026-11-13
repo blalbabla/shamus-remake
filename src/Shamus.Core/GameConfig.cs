@@ -15,6 +15,10 @@ public sealed class GameConfig
     public int DeathTicks { get; init; } = 60;
 
     public float DroneShooterChance { get; init; } = 0.5f; // share of spiral drones that fire
+    public int PotionPoints { get; init; } = 100;
+    public int BonusMin { get; init; } = 250;
+    public int BonusMax { get; init; } = 1000;
+    public float PickupRadius { get; init; } = 0.9f;
     public int Seed { get; init; } = 1;
     public float EnemyRadius { get; init; } = 0.5f;
     public float EnemyBulletSpeed { get; init; } = 0.28f;

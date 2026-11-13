@@ -16,6 +16,9 @@ public sealed class RoomGrid
     private readonly bool[,] _solid = new bool[W, H];
     public bool IsSolid(int x, int y) => x < 0 || y < 0 || x >= W || y >= H || _solid[x, y];
 
+    /// <summary>Marks cells [x0,x1) x [y0,y1) solid / empty (used for locked doors).</summary>
+    public void SetSolid(int x0, int y0, int x1, int y1, bool solid) => Fill(x0, y0, x1, y1, solid);
+
     public static RoomGrid Build(MazeData m, int room)
     {
         var g = new RoomGrid();

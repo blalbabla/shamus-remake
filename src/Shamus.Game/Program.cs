@@ -3,6 +3,7 @@ using Raylib_cs;
 using Shamus.Core;
 using Shamus.Core.Mazes;
 using Shamus.Core.Simulation;
+using Shamus.Game.Rendering;
 
 // Controls: WASD/arrows move (8 directions), Space/Ctrl fire, [ ] debug room jump, R restart.
 var mazeName = args.Length > 0 ? args[0] : "c64";
@@ -77,6 +78,42 @@ while (!Raylib.WindowShouldClose())
         }
     }
 
+    // locked door overlay in the key colour
+    if (world.DoorClosed && world.Obj != null)
+    {
+        var dc = AtariPalette.ToColor(world.Obj.Hue, world.Obj.Luma);
+        float dxc = world.DoorSide < 0 ? 0.5f : RoomGrid.W - 0.5f;
+        Raylib.DrawCube(P(dxc, (RoomGrid.DoorY0 + RoomGrid.DoorY1) / 2f, 0.9f), 1f, 1.8f, RoomGrid.DoorY1 - RoomGrid.DoorY0, dc);
+    }
+    Vector3? mysteryPos = null;
+    if (world.Obj != null)
+    {
+        var o = world.Obj;
+        var oc = AtariPalette.ToColor(o.Hue, o.Luma);
+        var op = P(o.X, o.Y, 0.8f);
+        float bob = MathF.Sin((float)Raylib.GetTime() * 3f) * 0.12f;
+        switch (o.Kind)
+        {
+            case ObjectKind.Key:
+                Raylib.DrawSphere(op + new Vector3(-0.5f, bob, 0), 0.35f, oc);
+                Raylib.DrawCube(op + new Vector3(0.1f, bob, 0), 1.0f, 0.18f, 0.18f, oc);
+                Raylib.DrawCube(op + new Vector3(0.45f, bob, 0.2f), 0.15f, 0.18f, 0.4f, oc);
+                break;
+            case ObjectKind.Keyhole:
+                Raylib.DrawCube(op, 1.0f, 1.2f, 1.0f, oc);
+                Raylib.DrawCube(op + new Vector3(0, 0.62f, 0), 0.25f, 0.05f, 0.6f, Color.Black);
+                break;
+            case ObjectKind.Potion:
+                Raylib.DrawSphere(op + new Vector3(0, bob, 0), 0.45f, oc.A == 0 ? Color.Lime : new Color(120, 230, 150, 255));
+                Raylib.DrawCylinder(op + new Vector3(0, 0.3f + bob, 0), 0.12f, 0.12f, 0.6f, 8, Color.LightGray);
+                break;
+            case ObjectKind.Mystery:
+                Raylib.DrawCube(op + new Vector3(0, bob, 0), 0.9f, 0.9f, 0.9f, new Color(150, 80, 220, 255));
+                mysteryPos = op + new Vector3(0, 1.0f, 0);
+                break;
+        }
+    }
+
     if (world.IsPodRoom)
     {
         if (!world.PodOpen)
@@ -90,11 +127,6 @@ while (!Raylib.WindowShouldClose())
                 Raylib.DrawCube(P(bx, 1f + topH / 2f, 0.75f), config.PodBarrierWidth, 1.5f, topH, bar);
                 Raylib.DrawCube(P(bx, botY0 + botH / 2f, 0.75f), config.PodBarrierWidth, 1.5f, botH, bar);
             }
-            // target: key-like pickup in the centre
-            float spin = (float)Raylib.GetTime() * 90f;
-            var t = P(config.PodTargetX, config.PodTargetY, 0.9f);
-            Raylib.DrawSphere(t, 0.55f, Color.Lime);
-            Raylib.DrawCylinder(t + new Vector3(0, -0.5f, 0), 0.12f, 0.12f, 1.0f, 8, Color.Green);
         }
     }
 
@@ -138,6 +170,13 @@ while (!Raylib.WindowShouldClose())
         Raylib.DrawSphere(P(b.X, b.Y, 0.9f), 0.22f, Color.SkyBlue);
 
     Raylib.EndMode3D();
+    if (mysteryPos is Vector3 mp)
+    {
+        var sp = Raylib.GetWorldToScreen(mp, cam);
+        Raylib.DrawText("?", (int)sp.X - 8, (int)sp.Y - 14, 32, Color.White);
+    }
+    for (int i = 0; i < world.Keys.Count; i++)
+        Raylib.DrawRectangle(12 + i * 26, 104, 22, 22, AtariPalette.ToColor(world.Keys[i] & 0x0F, (world.Keys[i] >> 4) & 0x0E));
     Raylib.DrawText($"{maze.Name}  room {world.Room}  level {maze.Level(world.Room) + 1}  {maze.Kind(world.Room)}", 12, 10, 24, Color.White);
     Raylib.DrawText($"lives {world.Lives}   score {world.Score}   enemies {world.Enemies.Count}" + (world.Phase == GamePhase.GameOver ? "   GAME OVER (R)" : ""), 12, 40, 24, Color.Yellow);
     Raylib.DrawText("WASD move   Space fire   [ ] room   R restart   F5 reload assets/config.json", 12, 72, 18, Color.Gray);

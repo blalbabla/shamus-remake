@@ -121,3 +121,63 @@ public class BulletClashTests
         Assert.Empty(w.EnemyBullets);
     }
 }
+
+public class ObjectTests
+{
+    static MazeData Maze(string n = "c64")
+    {
+        var d = new DirectoryInfo(AppContext.BaseDirectory);
+        while (!Directory.Exists(Path.Combine(d.FullName, "assets", "mazes"))) d = d.Parent!;
+        return MazeLoader.Load(Path.Combine(d.FullName, "assets", "mazes", n + ".maze"));
+    }
+
+    [Theory]
+    [InlineData("c64")] [InlineData("holmes")] [InlineData("cluseau")] [InlineData("marlowe")] [InlineData("bond")]
+    public void EveryKeyholeHasAMatchingKey(string name)
+    {
+        var m = Maze(name);
+        var keys = Enumerable.Range(0, 128).Where(r => m.Object(r) == ObjectKind.Key).Select(m.KeyId).ToList();
+        // Source data quirk: Cluseau room 117 has a light-red keyhole with no matching key anywhere.
+        var orphans = Enumerable.Range(0, 128).Where(r => m.Object(r) == ObjectKind.Keyhole && !keys.Contains(m.KeyId(r))).ToList();
+        Assert.True(orphans.Count == 0 || (name == "cluseau" && orphans.SequenceEqual(new[] { 117 })), string.Join(",", orphans));
+    }
+
+    [Fact]
+    public void KeyOpensDoor()
+    {
+        var m = Maze();
+        int room = Enumerable.Range(0, 128).First(r => m.Object(r) == ObjectKind.Keyhole && !m.IsCorridor(r));
+        var w = new GameWorld(m, new GameConfig(), room);
+        Assert.True(w.DoorClosed);
+        w.Keys.Add(m.KeyId(room));
+        Assert.NotNull(w.Obj);
+        w.DebugTeleport(w.Obj!.X, w.Obj.Y);
+        w.Tick(new InputState(0, 0, false));
+        Assert.False(w.DoorClosed);
+        Assert.Empty(w.Keys);
+    }
+
+    [Fact]
+    public void WithoutKeyDoorStaysClosed()
+    {
+        var m = Maze();
+        int room = Enumerable.Range(0, 128).First(r => m.Object(r) == ObjectKind.Keyhole && !m.IsCorridor(r));
+        var w = new GameWorld(m, new GameConfig(), room);
+        w.DebugTeleport(w.Obj!.X, w.Obj.Y);
+        w.Tick(new InputState(0, 0, false));
+        Assert.True(w.DoorClosed);
+    }
+
+    [Fact]
+    public void PotionGivesLife()
+    {
+        var m = Maze();
+        int room = Enumerable.Range(0, 128).First(r => m.Object(r) == ObjectKind.Potion && !m.IsCorridor(r));
+        var w = new GameWorld(m, new GameConfig(), room);
+        int lives = w.Lives;
+        w.DebugTeleport(w.Obj!.X, w.Obj.Y);
+        w.Tick(new InputState(0, 0, false));
+        Assert.Equal(lives + 1, w.Lives);
+        Assert.Null(w.Obj);
+    }
+}

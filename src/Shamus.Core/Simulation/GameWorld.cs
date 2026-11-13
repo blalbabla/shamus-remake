@@ -33,6 +33,15 @@ public sealed class GameWorld
     public bool RoomCleared { get; private set; }
     private readonly Random _rng;
 
+    // objects, keys and doors
+    public RoomObject? Obj { get; private set; }
+    public List<int> Keys { get; } = new();              // key ids carried
+    public int DoorSide { get; private set; }            // -1 left, +1 right, 0 none
+    public bool DoorClosed { get; private set; }
+    private readonly HashSet<int> _taken = new();        // rooms whose object was collected
+    private readonly HashSet<int> _unlocked = new();     // keyhole rooms already opened
+    private static readonly float[] ObjX = { 12.5f, 20f, 28f }, ObjY = { 4f, 11f, 18f };
+
     // pod state
     public bool IsPodRoom { get; private set; }
     public bool PodOpen { get; private set; }
@@ -63,7 +72,76 @@ public sealed class GameWorld
         SlitY[0] = 4f; _slitDir[0] = 1;
         SlitY[1] = 14f; _slitDir[1] = -1;
         Events.Add(new WorldEvent(WorldEventKind.RoomEntered, x, y, Room));
+        SpawnObject();
         SpawnEnemies();
+    }
+
+    private void SpawnObject()
+    {
+        Obj = null; DoorSide = 0; DoorClosed = false;
+        var kind = Maze.Object(Room);
+        if (kind == ObjectKind.None || kind == ObjectKind.Shadow) return;
+        if (IsPodRoom)
+        {   // the pod target is the room's object; position fixed in the centre
+            Obj = new RoomObject { Kind = kind, X = Config.PodTargetX, Y = Config.PodTargetY, KeyId = Maze.KeyId(Room), Hue = Maze.ObjectHue(Room), Luma = Maze.ObjectLuma(Room) };
+            return;
+        }
+        if (kind == ObjectKind.Keyhole)
+        {
+            DoorSide = Maze.DoorOnLeft(Room) ? -1 : 1;
+            DoorClosed = !_unlocked.Contains(Room);
+            if (DoorClosed) SetDoor(true);
+        }
+        else if (_taken.Contains(Room)) return;
+        // random one of the 9 positions of the '#' grid, in a random order until a free one is found
+        var order = Enumerable.Range(0, 9).OrderBy(_ => _rng.Next()).ToList();
+        foreach (int i in order)
+        {
+            float x = ObjX[i % 3], y = ObjY[i / 3];
+            if (!OpenArea(x, y, 0.7f)) continue;
+            if (MathF.Abs(x - PlayerX) + MathF.Abs(y - PlayerY) < 4f) continue;
+            Obj = new RoomObject { Kind = kind, X = x, Y = y, KeyId = Maze.KeyId(Room), Hue = Maze.ObjectHue(Room), Luma = Maze.ObjectLuma(Room) };
+            return;
+        }
+    }
+
+    /// <summary>Debug / test helper.</summary>
+    public void DebugTeleport(float x, float y) { PlayerX = PrevPlayerX = x; PlayerY = PrevPlayerY = y; }
+
+    private void SetDoor(bool closed)
+    {
+        int x0 = DoorSide < 0 ? 0 : RoomGrid.W - 1;
+        Grid.SetSolid(x0, RoomGrid.DoorY0, x0 + 1, RoomGrid.DoorY1, closed);
+    }
+
+    private void UpdatePickup()
+    {
+        if (Obj == null || IsPodRoom) return;
+        float dx = Obj.X - PlayerX, dy = Obj.Y - PlayerY;
+        if (dx * dx + dy * dy > Config.PickupRadius * Config.PickupRadius) return;
+        switch (Obj.Kind)
+        {
+            case ObjectKind.Key:
+                Keys.Add(Obj.KeyId); _taken.Add(Room);
+                Events.Add(new WorldEvent(WorldEventKind.KeyPicked, Obj.X, Obj.Y, Obj.KeyId));
+                Obj = null; break;
+            case ObjectKind.Potion:
+                Lives++; Score += Config.PotionPoints; _taken.Add(Room);
+                Events.Add(new WorldEvent(WorldEventKind.PotionPicked, Obj.X, Obj.Y));
+                Obj = null; break;
+            case ObjectKind.Mystery:
+                int pts = Config.BonusMin + _rng.Next((Config.BonusMax - Config.BonusMin) / 50 + 1) * 50;
+                Score += pts; _taken.Add(Room);
+                Events.Add(new WorldEvent(WorldEventKind.BonusPicked, Obj.X, Obj.Y, pts));
+                Obj = null; break;
+            case ObjectKind.Keyhole:
+                if (DoorClosed && Keys.Remove(Obj.KeyId))
+                {
+                    DoorClosed = false; _unlocked.Add(Room); SetDoor(false);
+                    Events.Add(new WorldEvent(WorldEventKind.DoorOpened, Obj.X, Obj.Y, Obj.KeyId));
+                }
+                break;
+        }
     }
 
     private bool OpenArea(float x, float y, float r)
@@ -147,6 +225,7 @@ public sealed class GameWorld
         if (Phase != GamePhase.Playing) return;
         if (_cooldown > 0) _cooldown--;
         if (input.Fire && _cooldown == 0 && Bullets.Count < Config.MaxBullets) Fire();
+        UpdatePickup();
         UpdateBullets();
         UpdateEnemies();
         if (Phase == GamePhase.Playing) UpdateEnemyBullets();
