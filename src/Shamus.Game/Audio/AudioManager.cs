@@ -16,6 +16,14 @@ public sealed class AudioManager : IDisposable
     private readonly Dictionary<Sfx, int> _lastPlayed = new();
     private long _frame;
 
+    // background ambience: a never-repeating real-time stream
+    private AudioStream _music;
+    private bool _musicOn;
+    private readonly AmbientSynth _ambient = new();
+    private readonly short[] _musicBuf = new short[ChunkFrames * 2];
+    private const int ChunkFrames = 4096;
+    public float MusicVolume { get; set; } = 0.6f;
+
     public bool Active { get; private set; }
     public bool Muted { get; set; }
     public float Volume { get; set; } = 0.8f;
@@ -39,7 +47,31 @@ public sealed class AudioManager : IDisposable
             Raylib.UnloadWave(wave);
         }
         Active = true;
+        Raylib.SetAudioStreamBufferSizeDefault(ChunkFrames);
+        _music = Raylib.LoadAudioStream(AmbientSynth.Rate, 16, 2);
+        _ambient.Render(_musicBuf, ChunkFrames);
+        Push();
+        Raylib.PlayAudioStream(_music);
+        _musicOn = true;
         Console.WriteLine($"AUDIO: rendered {jobs.Count} procedural sounds in {sw.ElapsedMilliseconds} ms");
+    }
+
+    private unsafe void Push()
+    {
+        fixed (short* p = _musicBuf) Raylib.UpdateAudioStream(_music, p, ChunkFrames);
+    }
+
+    /// <summary>Call every frame: refills the ambience stream. tension 0..1 (danger), muffle 0..1 (menus, pause).</summary>
+    public void UpdateMusic(float tension, float muffle)
+    {
+        if (!_musicOn) return;
+        _ambient.TensionTarget = tension; _ambient.MuffleTarget = muffle;
+        Raylib.SetAudioStreamVolume(_music, Muted ? 0f : MusicVolume * Volume);
+        for (int i = 0; i < 2 && Raylib.IsAudioStreamProcessed(_music); i++)
+        {
+            _ambient.Render(_musicBuf, ChunkFrames);
+            Push();
+        }
     }
 
     public void Play(Sfx sfx, float volume = 1f)
@@ -92,6 +124,7 @@ public sealed class AudioManager : IDisposable
     public void Dispose()
     {
         if (!Active) return;
+        if (_musicOn) { Raylib.StopAudioStream(_music); Raylib.UnloadAudioStream(_music); }
         foreach (var arr in _sounds.Values) foreach (var s in arr) Raylib.UnloadSound(s);
         Raylib.CloseAudioDevice();
         Active = false;

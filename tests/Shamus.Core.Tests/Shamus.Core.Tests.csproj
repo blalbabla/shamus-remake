@@ -20,6 +20,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Shamus.Core\Shamus.Core.csproj" />
+    <ProjectReference Include="..\..\src\Shamus.Game\Shamus.Game.csproj" />
   </ItemGroup>
 
 </Project>

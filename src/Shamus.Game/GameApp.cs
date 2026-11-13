@@ -106,6 +106,11 @@ public sealed class GameApp
         });
         _titleMenu.Items.Add(new MenuItem
         {
+            Label = () => "MUSIC: " + (_settings.MusicVolume <= 0.001f ? "OFF" : $"{(int)Math.Round(_settings.MusicVolume * 100)}%"),
+            OnChange = d => { _settings.MusicVolume = Math.Clamp(_settings.MusicVolume + d * 0.1f, 0f, 1f); ApplyAudioSettings(); _settings.Save(); },
+        });
+        _titleMenu.Items.Add(new MenuItem
+        {
             Label = () => "GOD MODE: " + (_settings.GodMode ? "ON (test)" : "OFF"),
             OnChange = _ => { _settings.GodMode = !_settings.GodMode; _settings.Save(); },
         });
@@ -116,7 +121,7 @@ public sealed class GameApp
         _pauseMenu.Items.Add(new MenuItem { Label = () => "MAIN MENU", OnEnter = ToTitle });
     }
 
-    private void ApplyAudioSettings() { _audio.Muted = _settings.Muted || _args.Contains("--mute"); _audio.Volume = _settings.Volume; }
+    private void ApplyAudioSettings() { _audio.Muted = _settings.Muted || _args.Contains("--mute"); _audio.Volume = _settings.Volume; _audio.MusicVolume = _settings.MusicVolume; }
 
     private void LoadDemo()
     {
@@ -173,6 +178,7 @@ public sealed class GameApp
     {
         if (Raylib.IsKeyPressed(KeyboardKey.F2)) { _settings.Muted = !_settings.Muted; ApplyAudioSettings(); _settings.Save(); }
         _hud.Update(dt);
+        UpdateAmbience();
 
         switch (_state)
         {
@@ -226,6 +232,23 @@ public sealed class GameApp
                 }
                 break;
         }
+    }
+
+    /// <summary>Feeds the ambient stream: more tension with enemies nearby, Shadow warning/chase; muffled in menus.</summary>
+    private void UpdateAmbience()
+    {
+        float tension = 0, muffle = 0;
+        switch (_state)
+        {
+            case AppState.Title: muffle = 0.55f; break;
+            case AppState.Paused: case AppState.Map: muffle = 0.8f; tension = 0.1f; break;
+            case AppState.GameOver: muffle = 0.7f; break;
+            default:
+                tension = Math.Min(1f, _world.Enemies.Count / 7f * 0.55f + (_world.ShadowWarned ? 0.25f : 0f) + (_world.ShadowActive ? 0.55f : 0f));
+                if (_world.IsPodRoom && !_world.PodOpen) tension = Math.Max(tension, 0.3f);
+                break;
+        }
+        _audio.UpdateMusic(tension, muffle);
     }
 
     private void Draw(float dt)

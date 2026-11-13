@@ -9,6 +9,7 @@ public sealed class Settings
     public string Maze { get; set; } = "c64";
     public Difficulty Difficulty { get; set; } = Difficulty.Advanced;
     public float Volume { get; set; } = 0.8f;
+    public float MusicVolume { get; set; } = 0.6f;
     public bool Muted { get; set; }
     public bool GodMode { get; set; }
     public int Seed { get; set; } = 1;
