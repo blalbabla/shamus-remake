@@ -83,7 +83,7 @@ public sealed class Hud
         Text($"ROOM {w.Room:D3}", 16, screenH - 32, 24, Color.Yellow);
         Text($"LEVEL {lvl + 1} {SceneRenderer.LevelNames[lvl]}", 190, screenH - 32, 24, SceneRenderer.LevelColors[lvl]);
         Text($"{w.Maze.Name.ToUpperInvariant()}" + (w.Cycle > 0 ? $"   LOOP {w.Cycle + 1}" : ""), 480, screenH - 32, 24, Color.LightGray);
-        string status = w.Enemies.Count > 0 ? $"ENEMIES {w.Enemies.Count}" : w.IsPodRoom ? "SHOOT THE TARGET" : "CLEAR";
+        string status = w.Enemies.Count > 0 ? $"ENEMIES {w.Enemies.Count}" : w.IsPodRoom && !w.PodOpen ? "SHOOT THE TARGET" : "CLEAR";
         Text(status, screenW - 250, screenH - 32, 24, w.Enemies.Count > 0 ? Color.Orange : Color.Lime);
         if (showHelp) Text("WASD move   SPACE fire   P pause   M map   F2 mute", 16, screenH - 64, 18, Color.Gray);
 

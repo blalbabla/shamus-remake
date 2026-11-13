@@ -301,3 +301,30 @@ public class BoundaryAndGodTests
         Assert.DoesNotContain(4, w.Visited);
     }
 }
+
+public class PodRegressionTests
+{
+    static MazeData Maze()
+    {
+        var d = new DirectoryInfo(AppContext.BaseDirectory);
+        while (!Directory.Exists(Path.Combine(d.FullName, "assets", "mazes"))) d = d.Parent!;
+        return MazeLoader.Load(Path.Combine(d.FullName, "assets", "mazes", "c64.maze"));
+    }
+
+    [Fact]
+    public void OpeningPodSpawnsEnemiesAndKeyIsCollectable()
+    {
+        var m = Maze();
+        var w = new GameWorld(m, new GameConfig(), 18);
+        Assert.NotNull(w.Obj);
+        for (int i = 0; i < 6000 && !w.PodOpen; i++) { Assert.Empty(w.Enemies); w.Tick(new InputState(0, 0, true)); } // none while closed
+        Assert.True(w.PodOpen);
+        Assert.NotEmpty(w.Enemies);                  // opening the pod fills the room with enemies
+        Assert.NotNull(w.Obj);                       // the key is still there after the barriers vanish
+        w.Enemies.Clear();
+        w.DebugTeleport(w.Obj!.X, w.Obj.Y);
+        w.Tick(new InputState(0, 0, false));
+        Assert.Single(w.Keys);
+        Assert.Null(w.Obj);
+    }
+}

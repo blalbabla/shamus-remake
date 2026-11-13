@@ -33,6 +33,7 @@ public sealed class GameWorld
     public bool RoomCleared { get; private set; }
     private readonly Random _rng;
     private readonly HashSet<int> _visited = new();
+    private readonly HashSet<int> _podsOpened = new();   // pod rooms whose barriers were shot away
     public IReadOnlySet<int> Visited => _visited;
     /// <summary>True if the room's object was collected or its door unlocked.</summary>
     public bool IsTaken(int room) => _taken.Contains(room) || _unlocked.Contains(room);
@@ -84,7 +85,7 @@ public sealed class GameWorld
         PlayerY = PrevPlayerY = _entryY = y;
         Bullets.Clear();
         IsPodRoom = Maze.IsPod(Room);
-        PodOpen = false;
+        PodOpen = IsPodRoom && Room != MazeData.RoomCount - 1 && _podsOpened.Contains(Room);
         SlitY[0] = 4f; _slitDir[0] = 1;
         SlitY[1] = 14f; _slitDir[1] = -1;
         Events.Add(new WorldEvent(WorldEventKind.RoomEntered, x, y, Room));
@@ -100,6 +101,7 @@ public sealed class GameWorld
         Obj = null; DoorSide = 0; DoorClosed = false;
         var kind = Maze.Object(Room);
         if (kind == ObjectKind.None || (kind == ObjectKind.Shadow && !IsPodRoom)) return;
+        if (IsPodRoom && _taken.Contains(Room) && kind != ObjectKind.Shadow) return; // already collected
         if (IsPodRoom)
         {   // the pod target is the room's object; position fixed in the centre
             Obj = new RoomObject { Kind = kind, X = Config.PodTargetX, Y = Config.PodTargetY, KeyId = Maze.KeyId(Room), Hue = Maze.ObjectHue(Room), Luma = Maze.ObjectLuma(Room) };
@@ -135,7 +137,7 @@ public sealed class GameWorld
 
     private void UpdatePickup()
     {
-        if (Obj == null || IsPodRoom) return;
+        if (Obj == null || (IsPodRoom && !PodOpen)) return;
         float dx = Obj.X - PlayerX, dy = Obj.Y - PlayerY;
         if (dx * dx + dy * dy > Config.PickupRadius * Config.PickupRadius) return;
         switch (Obj.Kind)
@@ -175,7 +177,7 @@ public sealed class GameWorld
     {
         Enemies.Clear(); EnemyBullets.Clear();
         RoomCleared = false;
-        if (IsPodRoom || Room == 127) { RoomCleared = true; return; }
+        if ((IsPodRoom && !PodOpen) || Room == MazeData.RoomCount - 1) { RoomCleared = true; return; }
         int level = Maze.Level(Room);
         int count = Math.Min(2 + level + _rng.Next(0, 3), 7);
         int guard = 0;
@@ -407,7 +409,7 @@ public sealed class GameWorld
         int mx = Math.Sign(input.MoveX), my = Math.Sign(input.MoveY);
         if (mx != 0 || my != 0) { FaceX = mx; FaceY = my; }
         float len = (mx != 0 && my != 0) ? 0.70710678f : 1f;
-        float spd = Config.PlayerSpeed * (RoomCleared && !IsPodRoom ? Config.ClearedSpeedBonus : 1f);
+        float spd = Config.PlayerSpeed * (RoomCleared && !(IsPodRoom && !PodOpen) ? Config.ClearedSpeedBonus : 1f);
         float nx = PlayerX + mx * spd * len, ny = PlayerY + my * spd * len;
 
         // pod barriers are solid for the player
@@ -458,6 +460,7 @@ public sealed class GameWorld
                         PodOpen = true; dead = true;
                         Events.Add(new WorldEvent(WorldEventKind.PodOpened, b.X, b.Y));
                         if (Room == MazeData.RoomCount - 1) Win();
+                        else { _podsOpened.Add(Room); SpawnEnemies(); } // barriers vanish, the room fills with enemies
                         break;
                     }
                     if (InBarrier(b.X, b.Y)) { dead = true; Events.Add(new WorldEvent(WorldEventKind.BulletHitBarrier, b.X, b.Y)); break; }
