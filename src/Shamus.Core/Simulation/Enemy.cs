@@ -11,5 +11,8 @@ public sealed class Enemy
     public int DashLeft;      // snap jumper dash ticks left
     public float DashX, DashY;
     public int ShotCooldown;
+    public int ModeLeft;      // ticks until the next behaviour decision
+    public float Offset;      // angle offset from "straight at player" (circling / retreating)
+    public int DirX, DirY;    // current axis direction (robo droid)
     public bool Alive = true;
 }

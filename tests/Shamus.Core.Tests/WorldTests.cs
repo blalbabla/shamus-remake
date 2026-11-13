@@ -98,3 +98,26 @@ public class EnemyTests
         Assert.Equal(a.Enemies.Count, b.Enemies.Count);
     }
 }
+
+public class BulletClashTests
+{
+    [Fact]
+    public void PlayerBulletCancelsEnemyBullet()
+    {
+        var d = new DirectoryInfo(AppContext.BaseDirectory);
+        while (!Directory.Exists(Path.Combine(d.FullName, "assets", "mazes"))) d = d.Parent!;
+        var m = MazeLoader.Load(Path.Combine(d.FullName, "assets", "mazes", "c64.maze"));
+        var w = new GameWorld(m, new GameConfig(), 3);
+        w.Enemies.Clear();
+        // enemy bullet flying toward the player along the door band
+        w.EnemyBullets.Add(new Bullet { X = 12f, Y = w.PlayerY, DX = -0.28f, DY = 0 });
+        bool cancelled = false;
+        for (int i = 0; i < 60 && !cancelled; i++)
+        {
+            w.Tick(new InputState(0, 0, i == 0));
+            cancelled = w.Events.Any(e => e.Kind == WorldEventKind.BulletsCancelled);
+        }
+        Assert.True(cancelled);
+        Assert.Empty(w.EnemyBullets);
+    }
+}

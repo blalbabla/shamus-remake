@@ -166,6 +166,24 @@ public sealed class GameWorld
         return true;
     }
 
+    /// <summary>Picks a new, semi-random intent: usually toward the player, sometimes sideways, back or random.</summary>
+    private void Decide(Enemy e, float dx, float dy)
+    {
+        double r = _rng.NextDouble();
+        bool horiz = MathF.Abs(dx) > MathF.Abs(dy);
+        int towardX = MathF.Sign(dx) == 0 ? 1 : (int)MathF.Sign(dx), towardY = MathF.Sign(dy) == 0 ? 1 : (int)MathF.Sign(dy);
+        // axis direction (robo / snap)
+        if (r < 0.50) { e.DirX = horiz ? towardX : 0; e.DirY = horiz ? 0 : towardY; }          // toward, dominant axis
+        else if (r < 0.65) { e.DirX = horiz ? 0 : towardX; e.DirY = horiz ? towardY : 0; }     // toward, other axis
+        else if (r < 0.80) { e.DirX = horiz ? -towardX : 0; e.DirY = horiz ? 0 : -towardY; }   // step back
+        else { int d = _rng.Next(4); e.DirX = d == 0 ? 1 : d == 1 ? -1 : 0; e.DirY = d == 2 ? 1 : d == 3 ? -1 : 0; } // wander
+        // spiral drone: angular offset from the straight line to the player
+        e.Offset = r < 0.45 ? 0f : r < 0.70 ? (_rng.Next(2) == 0 ? 1.57f : -1.57f)   // circle around
+                 : r < 0.85 ? 3.14f + (float)(_rng.NextDouble() - 0.5)              // retreat
+                 : (float)(_rng.NextDouble() * 6.28);                               // drift
+        e.ModeLeft = 15 + _rng.Next(45);
+    }
+
     private void UpdateEnemies()
     {
         int level = Maze.Level(Room);
@@ -176,36 +194,35 @@ public sealed class GameWorld
             e.Timer++;
             float dx = PlayerX - e.X, dy = PlayerY - e.Y;
             float dist = MathF.Sqrt(dx * dx + dy * dy) + 0.0001f;
+            if (e.ModeLeft > 0) e.ModeLeft--; else Decide(e, dx, dy);
             switch (e.Kind)
             {
-                case EnemyKind.RoboDroid: // plods along one axis toward the player
+                case EnemyKind.RoboDroid: // plods along axes; direction re-chosen every so often
                     {
                         float v = 0.045f * spd;
-                        bool horiz = MathF.Abs(dx) > MathF.Abs(dy);
-                        float sx = MathF.Sign(dx) * v, sy = MathF.Sign(dy) * v;
-                        if (!(horiz ? Move(e, sx, 0) : Move(e, 0, sy)))      // blocked: try the other axis
-                            _ = horiz ? Move(e, 0, sy) : Move(e, sx, 0);
+                        if (!Move(e, e.DirX * v, e.DirY * v)) e.ModeLeft = 0; // blocked: decide again next tick
                         break;
                     }
-                case EnemyKind.SpiralDrone: // approaches along a swaying path
+                case EnemyKind.SpiralDrone: // sways around a heading that may circle or back off
                     {
                         float v = 0.06f * spd;
-                        float ang = MathF.Atan2(dy, dx) + 1.1f * MathF.Sin(e.Timer * 0.08f + e.Phase);
-                        Move(e, MathF.Cos(ang) * v, 0); Move(e, 0, MathF.Sin(ang) * v);
+                        float ang = MathF.Atan2(dy, dx) + e.Offset + 0.5f * MathF.Sin(e.Timer * 0.12f + e.Phase);
+                        bool movedX = Move(e, MathF.Cos(ang) * v, 0), movedY = Move(e, 0, MathF.Sin(ang) * v);
+                        if (!movedX && !movedY) e.ModeLeft = 0;
                         break;
                     }
-                default: // snap jumper: pause, then dash toward the player
+                default: // snap jumper: pause, then dash in a (mostly player-ward) direction
                     {
                         if (e.DashLeft > 0)
                         {
                             if (!Move(e, e.DashX, e.DashY)) e.DashLeft = 0; else e.DashLeft--;
                         }
-                        else if (e.Timer % 50 == 0)
+                        else if (e.Timer % 45 == 0)
                         {
+                            Decide(e, dx, dy);
                             float v = 0.32f * spd;
-                            if (MathF.Abs(dx) > MathF.Abs(dy)) { e.DashX = MathF.Sign(dx) * v; e.DashY = 0; }
-                            else { e.DashX = 0; e.DashY = MathF.Sign(dy) * v; }
-                            e.DashLeft = 7;
+                            e.DashX = e.DirX * v; e.DashY = e.DirY * v;
+                            e.DashLeft = 4 + _rng.Next(5);
                         }
                         break;
                     }
@@ -306,6 +323,17 @@ public sealed class GameWorld
                     }
                     if (InBarrier(b.X, b.Y)) { dead = true; Events.Add(new WorldEvent(WorldEventKind.BulletHitBarrier, b.X, b.Y)); break; }
                 }
+                for (int k = EnemyBullets.Count - 1; k >= 0; k--)
+                {
+                    var eb = EnemyBullets[k];
+                    if ((eb.X - b.X) * (eb.X - b.X) + (eb.Y - b.Y) * (eb.Y - b.Y) < 0.5f * 0.5f)
+                    {
+                        EnemyBullets.RemoveAt(k); dead = true;
+                        Events.Add(new WorldEvent(WorldEventKind.BulletsCancelled, b.X, b.Y));
+                        break;
+                    }
+                }
+                if (dead) break;
                 foreach (var e in Enemies)
                     if (e.Alive && (e.X - b.X) * (e.X - b.X) + (e.Y - b.Y) * (e.Y - b.Y) < 0.7f * 0.7f)
                     { KillEnemy(e); dead = true; break; }
