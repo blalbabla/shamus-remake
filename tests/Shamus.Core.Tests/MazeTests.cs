@@ -87,3 +87,43 @@ public class MapLayoutTests
         Assert.Equal(128, map.Levels.Sum(l => l.Rooms.Count));
     }
 }
+
+public class ProceduralMazeTests
+{
+    [Fact]
+    public void OriginalMazesPassTheValidatorExceptKnownQuirks()
+    {
+        var d = new DirectoryInfo(AppContext.BaseDirectory);
+        while (!Directory.Exists(Path.Combine(d.FullName, "assets", "mazes"))) d = d.Parent!;
+        var c64 = MazeLoader.Load(Path.Combine(d.FullName, "assets", "mazes", "c64.maze"));
+        Assert.True(MazeValidator.IsSolvable(c64));
+    }
+
+    [Fact]
+    public void GeneratesValidSolvableMazesForManySeeds()
+    {
+        for (int seed = 1; seed <= 60; seed++)
+        {
+            var m = ProceduralMaze.Generate(seed);
+            var errors = MazeValidator.Validate(m);
+            Assert.True(errors.Count == 0, $"seed {seed}: {string.Join("; ", errors.Take(5))}");
+            Assert.True(m.PodRooms.Count >= 5);
+            Assert.Contains(127, m.PodRooms);
+            Assert.True(Enumerable.Range(0, 128).Count(r => m.Object(r) == ObjectKind.Keyhole) >= 4, $"seed {seed}: too few locks");
+        }
+    }
+
+    [Fact]
+    public void SameSeedSameMazeDifferentSeedDifferentMaze()
+    {
+        Assert.Equal(ProceduralMaze.Generate(5).Raw, ProceduralMaze.Generate(5).Raw);
+        Assert.NotEqual(ProceduralMaze.Generate(5).Raw, ProceduralMaze.Generate(6).Raw);
+    }
+
+    [Fact]
+    public void GeneratedMazeHasMapLayoutForAllRooms()
+    {
+        var map = MapLayout.Auto(ProceduralMaze.Generate(3));
+        Assert.Equal(128, map.Levels.Sum(l => l.Rooms.Count));
+    }
+}

@@ -19,7 +19,7 @@ public sealed class GameApp
     private static readonly string[] MazeOrder = { "c64", "atari", "holmes", "cluseau", "marlowe", "bond" };
     private static readonly Dictionary<string, string> MazeLabels = new()
     {
-        ["c64"] = "ORIGINAL C64", ["atari"] = "ORIGINAL ATARI", ["holmes"] = "HOLMES", ["cluseau"] = "CLUSEAU", ["marlowe"] = "MARLOWE", ["bond"] = "BOND",
+        ["c64"] = "ORIGINAL C64", ["atari"] = "ORIGINAL ATARI", ["holmes"] = "HOLMES", ["cluseau"] = "CLUSEAU", ["marlowe"] = "MARLOWE", ["bond"] = "BOND", ["random"] = "PROCEDURAL",
     };
 
     private readonly string[] _args;
@@ -60,13 +60,18 @@ public sealed class GameApp
 
     private GameConfig BuildConfig() => GameConfig.Load(ConfigPath()).WithDifficulty(_settings.Difficulty).WithGodMode(_settings.GodMode);
 
+    private MazeData LoadMaze() =>
+        _settings.Maze == "random" ? ProceduralMaze.Generate(_settings.Seed) : MazeLoader.Load(MazePath(_settings.Maze));
+
     private static string MazePath(string name) => Path.Combine(AppContext.BaseDirectory, "assets", "mazes", name + ".maze");
 
     private void LoadMazeList()
     {
         foreach (var n in MazeOrder) if (File.Exists(MazePath(n))) _mazes.Add(n);
+        _mazes.Add("random");
         if (_mazes.Count == 0) throw new FileNotFoundException("No maze files found in assets/mazes");
         if (Arg("--maze") is { Length: > 0 } m && _mazes.Contains(m)) _settings.Maze = m;
+        if (int.TryParse(Arg("--seed"), out int seed) && seed > 0) _settings.Seed = seed;
         if (!_mazes.Contains(_settings.Maze)) _settings.Maze = _mazes[0];
     }
 
@@ -77,6 +82,12 @@ public sealed class GameApp
         {
             Label = () => "MAZE: " + MazeLabels.GetValueOrDefault(_settings.Maze, _settings.Maze),
             OnChange = d => { int i = (_mazes.IndexOf(_settings.Maze) + d + _mazes.Count) % _mazes.Count; _settings.Maze = _mazes[i]; _settings.Save(); LoadDemo(); },
+        });
+        _titleMenu.Items.Add(new MenuItem
+        {
+            Label = () => _settings.Maze == "random" ? $"SEED: {_settings.Seed}  (ENTER = random)" : "SEED: -",
+            OnChange = d => { if (_settings.Maze == "random") { _settings.Seed = Math.Max(1, _settings.Seed + d); _settings.Save(); LoadDemo(); } },
+            OnEnter = () => { if (_settings.Maze == "random") { _settings.Seed = Random.Shared.Next(1, 100000); _settings.Save(); LoadDemo(); } },
         });
         _titleMenu.Items.Add(new MenuItem
         {
@@ -109,7 +120,7 @@ public sealed class GameApp
 
     private void LoadDemo()
     {
-        _maze = MazeLoader.Load(MazePath(_settings.Maze));
+        _maze = LoadMaze();
         _config = BuildConfig();
         _world = new GameWorld(_maze, _config, 0);
         _map = MapLayout.Load(Path.Combine(AppContext.BaseDirectory, "assets", "maps"), _maze);
@@ -117,7 +128,7 @@ public sealed class GameApp
 
     private void StartGame(int room)
     {
-        _maze = MazeLoader.Load(MazePath(_settings.Maze));
+        _maze = LoadMaze();
         _config = BuildConfig();
         _startRoom = room;
         _world = new GameWorld(_maze, _config, room);

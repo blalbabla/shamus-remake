@@ -11,6 +11,7 @@ public sealed class Settings
     public float Volume { get; set; } = 0.8f;
     public bool Muted { get; set; }
     public bool GodMode { get; set; }
+    public int Seed { get; set; } = 1;
     public Dictionary<string, int> HighScores { get; set; } = new();
 
     private static string FilePath =>
