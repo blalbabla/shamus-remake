@@ -155,6 +155,11 @@ public sealed class GameApp
         _scene = new SceneRenderer(_settings.View);
         string view = Arg("--view");
         if (view is "top" or "iso") _scene.Rig.SetMode(view == "iso" ? ViewMode.Isometric : ViewMode.Top, instant: true);
+        if (float.TryParse(Arg("--zoom"), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float zoom)) _scene.Rig.Zoom = zoom;
+        var look = Arg("--look").Split(',');
+        if (look.Length == 2 && float.TryParse(look[0], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float lx)
+            && float.TryParse(look[1], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float ly))
+            _scene.Rig.Look = new System.Numerics.Vector3(lx - 20f, 0, ly - 11f);
         string shot = Arg("--shot");
         int frame = 0;
         _audio.Init();

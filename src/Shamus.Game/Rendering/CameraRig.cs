@@ -22,6 +22,9 @@ public sealed class CameraRig
 
     private float _t;   // 0 = top, 1 = isometric
     public ViewMode Mode { get; private set; }
+    /// <summary>Debug: zoom factor and a point (room cell coordinates) to centre on, for close-up screenshots.</summary>
+    public float Zoom { get; set; } = 1f;
+    public Vector3 Look { get; set; }
     public Camera3D Camera { get; private set; }
 
     public CameraRig(ViewMode mode) { SetMode(mode, instant: true); }
@@ -50,13 +53,13 @@ public sealed class CameraRig
     {
         float s = _t * _t * (3 - 2 * _t); // smoothstep
         var dir = Vector3.Normalize(Vector3.Lerp(TopDir, IsoDir, s));
-        var target = Vector3.Lerp(Vector3.Zero, IsoTarget, s);
+        var target = Vector3.Lerp(Vector3.Zero, IsoTarget, s) + Look;
         Camera = new Camera3D
         {
             Position = target + dir * Distance,
             Target = target,
             Up = Vector3.Normalize(Vector3.Lerp(TopUp, IsoUp, s)),
-            FovY = TopHeight + (IsoHeight - TopHeight) * s,
+            FovY = (TopHeight + (IsoHeight - TopHeight) * s) / Zoom,
             Projection = CameraProjection.Orthographic,
         };
     }
