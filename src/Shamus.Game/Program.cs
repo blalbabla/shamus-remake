@@ -3,6 +3,7 @@ using Raylib_cs;
 using Shamus.Core;
 using Shamus.Core.Mazes;
 using Shamus.Core.Simulation;
+using Shamus.Game.Audio;
 using Shamus.Game.Rendering;
 
 // Controls: WASD/arrows move (8 directions), Space/Ctrl fire, [ ] debug room jump, R restart.
@@ -24,6 +25,8 @@ var world = new GameWorld(maze, config, startRoom);
 
 Raylib.InitWindow(1280, 720, "Shamus 3D");
 Raylib.SetTargetFPS(60);
+var audio = new AudioManager { Muted = args.Contains("--mute") };
+audio.Init();
 
 var cam = new Camera3D
 {
@@ -44,6 +47,7 @@ while (!Raylib.WindowShouldClose())
 {
     if (Raylib.IsKeyPressed(KeyboardKey.RightBracket)) world = new GameWorld(maze, config, world.Room + 1);
     if (Raylib.IsKeyPressed(KeyboardKey.LeftBracket)) world = new GameWorld(maze, config, world.Room - 1);
+    if (Raylib.IsKeyPressed(KeyboardKey.M)) audio.Muted = !audio.Muted;
     if (Raylib.IsKeyPressed(KeyboardKey.R)) world = new GameWorld(maze, config, startRoom);
     if (Raylib.IsKeyPressed(KeyboardKey.F5)) { config = GameConfig.Load(ConfigPath()); world = new GameWorld(maze, config, world.Room); }
 
@@ -55,7 +59,7 @@ while (!Raylib.WindowShouldClose())
     bool fire = Raylib.IsKeyDown(KeyboardKey.Space) || Raylib.IsKeyDown(KeyboardKey.LeftControl);
 
     acc = MathF.Min(acc + Raylib.GetFrameTime(), 0.1f);
-    while (acc >= Step) { world.Tick(new InputState(mx, my, fire)); acc -= Step; }
+    while (acc >= Step) { world.Tick(new InputState(mx, my, fire)); audio.Handle(world.Events); acc -= Step; }
     float alpha = acc / Step;
 
     Raylib.BeginDrawing();
@@ -197,7 +201,8 @@ while (!Raylib.WindowShouldClose())
         Raylib.DrawText("!! SHADOW APPROACHES !!", 470, 40, 28, Color.Red);
     if (world.Phase == GamePhase.Won) Raylib.DrawText("SHADOW DEFEATED", 500, 330, 40, Color.Gold);
     if (world.Cycle > 0) Raylib.DrawText($"loop {world.Cycle + 1}", 12, 130, 18, Color.Gray);
-    Raylib.DrawText("WASD move   Space fire   [ ] room   R restart   F5 reload assets/config.json", 12, 72, 18, Color.Gray);
+    Raylib.DrawText("WASD move   Space fire   [ ] room   R restart   F5 reload config   M mute", 12, 72, 18, Color.Gray);
     Raylib.EndDrawing();
 }
+audio.Dispose();
 Raylib.CloseWindow();
