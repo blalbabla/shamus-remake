@@ -297,7 +297,7 @@ public sealed class GameWorld
     private void UpdateEnemies()
     {
         int level = Maze.Level(Room);
-        float spd = (1f + 0.25f * level) * (1f + Config.CycleEnemySpeedBonus * Cycle);
+        float spd = (1f + 0.25f * level) * (1f + Config.CycleEnemySpeedBonus * Cycle) * Config.EnemySpeedScale;
         foreach (var e in Enemies)
         {
             if (!e.Alive) continue;

@@ -240,3 +240,18 @@ public class ShadowTests
         Assert.Equal(1, w.Room);
     }
 }
+
+public class DifficultyTests
+{
+    [Fact]
+    public void DifficultyScalesEnemiesAndLives()
+    {
+        var b = new GameConfig();
+        var n = b.WithDifficulty(Difficulty.Novice);
+        var e = b.WithDifficulty(Difficulty.Expert);
+        Assert.True(n.EnemySpeedScale < b.EnemySpeedScale && e.EnemySpeedScale > b.EnemySpeedScale);
+        Assert.True(n.StartLives > b.StartLives && e.StartLives < b.StartLives);
+        Assert.Equal(b.PodBarrierX0, n.PodBarrierX0); // untouched fields survive the clone
+        Assert.Equal(b.EnemySpeedScale, b.WithDifficulty(Difficulty.Advanced).EnemySpeedScale);
+    }
+}

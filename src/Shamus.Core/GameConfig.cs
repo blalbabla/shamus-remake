@@ -1,8 +1,11 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 
 namespace Shamus.Core;
 
 /// <summary>Gameplay constants. Units: room cells (RoomGrid.W x RoomGrid.H), time: ticks at 60 Hz.</summary>
+public enum Difficulty { Novice, Advanced, Expert }
+
 public sealed class GameConfig
 {
     public int StartLives { get; init; } = 5;
@@ -25,6 +28,7 @@ public sealed class GameConfig
     public int ShadowKillPoints { get; init; } = 5000;
     public int WinTicks { get; init; } = 180;
     public float CycleEnemySpeedBonus { get; init; } = 0.2f;
+    public float EnemySpeedScale { get; init; } = 1f;
     public int Seed { get; init; } = 1;
     public float EnemyRadius { get; init; } = 0.5f;
     public float EnemyBulletSpeed { get; init; } = 0.28f;
@@ -46,6 +50,20 @@ public sealed class GameConfig
     /// <summary>Loads overrides from a JSON file; missing file or fields keep defaults.</summary>
     public static GameConfig Load(string path) =>
         File.Exists(path) ? JsonSerializer.Deserialize<GameConfig>(File.ReadAllText(path), Json) ?? new GameConfig() : new GameConfig();
+
+    /// <summary>Copy of this config adjusted for a difficulty level.</summary>
+    public GameConfig WithDifficulty(Difficulty d)
+    {
+        var o = JsonSerializer.SerializeToNode(this, Json)!.AsObject();
+        switch (d)
+        {
+            case Difficulty.Novice:
+                o["EnemySpeedScale"] = EnemySpeedScale * 0.8f; o["EnemyShotCooldown"] = (int)(EnemyShotCooldown * 1.3f); o["StartLives"] = StartLives + 1; break;
+            case Difficulty.Expert:
+                o["EnemySpeedScale"] = EnemySpeedScale * 1.25f; o["EnemyShotCooldown"] = (int)(EnemyShotCooldown * 0.75f); o["StartLives"] = Math.Max(3, StartLives - 1); break;
+        }
+        return o.Deserialize<GameConfig>(Json)!;
+    }
 
     public string ToJson() => JsonSerializer.Serialize(this, Json);
 }
