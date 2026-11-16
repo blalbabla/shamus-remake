@@ -51,8 +51,17 @@ public static class RoomMetrics
     /// </summary>
     public const float DroneSlitY = 0.69f;
 
-    /// <summary>Height of the black muzzle slot in a robo-droid's gun housing; its bolts leave from here.</summary>
-    public const float RobotMuzzleY = 0.60f;
+    /// <summary>
+    /// Height of the dark groove that runs around a robo-droid's turret. Its bolts leave from this band and the red
+    /// beacon runs along it, so the drum is the gun port.
+    /// </summary>
+    public const float RobotMuzzleY = 0.57f;
+
+    /// <summary>
+    /// Radius of a robo-droid's turret drum. It overhangs the hull and reaches out over the tracks, while the tracks
+    /// still show on both sides, so the machine reads as a tracked vehicle and not as a drum on skis.
+    /// </summary>
+    public const float RobotTurretRadius = 0.44f;
 
     /// <summary>The Shadow deliberately towers over the walls: it should feel like it does not belong to the room.</summary>
     public const float ShadowHeight = 1.45f;
