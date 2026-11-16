@@ -214,6 +214,7 @@ public sealed class GameApp
         _map = MapLayout.Load(Path.Combine(AppContext.BaseDirectory, "assets", "maps"), _maze);
         _startRoom = room;
         _world = new GameWorld(_maze, _config, room);
+        _scene.ResetTank();
         _acc = 0; _gameOverTimer = 0; _newHigh = false;
         _state = AppState.Playing;
     }
@@ -258,6 +259,7 @@ public sealed class GameApp
         {
             float dt = Raylib.GetFrameTime();
             Update(dt);
+            _scene.UpdateTank(_world, dt);   // once per frame, after the ticks: both render passes draw the tank
 
             Raylib.BeginDrawing();
             Rlgl.DisableScissorTest();

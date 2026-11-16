@@ -21,8 +21,14 @@ public static class RoomMetrics
     /// <summary>Pod-room barriers use the same band as the energy walls.</summary>
     public const float PodBarrierHeight = WallHeight;
 
-    /// <summary>Tank, dome and barrel included. Slightly lower than the walls, so it reads as standing inside.</summary>
-    public const float PlayerHeight = 0.92f;
+    /// <summary>
+    /// Tank, dome and barrel included. The hull and everything above it sit half a track height lower than the
+    /// track tops would suggest, so the tracks flank the hull instead of carrying it like a box on skis.
+    /// </summary>
+    public const float PlayerHeight = 0.73f;
+
+    /// <summary>Tank track (caterpillar) height; it also sets how far the hull drops below the track tops.</summary>
+    public const float TrackHeight = 0.34f;
 
     /// <summary>Tallest enemy, dome/head included.</summary>
     public const float EnemyHeight = 0.96f;
