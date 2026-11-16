@@ -41,6 +41,8 @@ public sealed class GameConfig
     public int SnapJumpTicks { get; init; } = 5;       // jump length in ticks (about 2 cells)
     public int Seed { get; init; } = 1;
     public float EnemyRadius { get; init; } = 0.5f;
+    /// <summary>How many body colours enemies are rolled from at spawn (the renderer wraps if it has fewer).</summary>
+    public int EnemyColorCount { get; init; } = 4;
     public float EnemyBulletSpeed { get; init; } = 0.28f;
     public int EnemyShotCooldown { get; init; } = 90;
     public float ClearedSpeedBonus { get; init; } = 1.25f;

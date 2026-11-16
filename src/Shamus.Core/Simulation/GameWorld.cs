@@ -206,7 +206,8 @@ public sealed class GameWorld
             var kind = level == 0 ? (roll < 5 ? EnemyKind.RoboDroid : roll < 9 ? EnemyKind.SpiralDrone : EnemyKind.SnapJumper)
                                   : (roll < 4 ? EnemyKind.RoboDroid : roll < 8 ? EnemyKind.SpiralDrone : EnemyKind.SnapJumper);
             Enemies.Add(new Enemy { Kind = kind, X = x, Y = y, Phase = (float)_rng.NextDouble() * 6.28f,
-                                    ShotCooldown = 30 + _rng.Next(Config.EnemyShotCooldown) });
+                                    ShotCooldown = 30 + _rng.Next(Config.EnemyShotCooldown),
+                                    ColorIndex = _rng.Next(Math.Max(1, Config.EnemyColorCount)) });
             var ne = Enemies[^1];
             if (ne.Kind == EnemyKind.SpiralDrone) ne.CanShoot = _rng.NextDouble() < Config.DroneShooterChance;
             else if (ne.Kind == EnemyKind.SnapJumper) ne.CanShoot = false;   // jumpers never shoot

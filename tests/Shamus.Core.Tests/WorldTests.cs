@@ -159,6 +159,27 @@ public class EnemyTests
         Assert.Equal(a.Lives, b.Lives);
         Assert.Equal(a.Enemies.Count, b.Enemies.Count);
     }
+
+    [Fact]
+    public void EnemyColoursAreRolledAndDeterministic()
+    {
+        var a = new GameWorld(Maze(), new GameConfig { Seed = 5 }, 3);
+        var b = new GameWorld(Maze(), new GameConfig { Seed = 5 }, 3);
+        Assert.Equal(a.Enemies.Select(e => e.ColorIndex), b.Enemies.Select(e => e.ColorIndex));
+
+        var seen = new HashSet<int>();
+        for (int seed = 1; seed <= 8; seed++)
+        {
+            var w = new GameWorld(Maze(), new GameConfig { Seed = seed }, 50);   // level 2: up to 7 enemies
+            Assert.NotEmpty(w.Enemies);
+            foreach (var e in w.Enemies)
+            {
+                Assert.InRange(e.ColorIndex, 0, w.Config.EnemyColorCount - 1);
+                seen.Add(e.ColorIndex);
+            }
+        }
+        Assert.True(seen.Count > 1, "a run of rooms should not paint every enemy the same colour");
+    }
 }
 
 public class BulletClashTests

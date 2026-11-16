@@ -16,6 +16,7 @@
   "DeathTicks": 60,
   "Seed": 1,
   "EnemyRadius": 0.5,
+  "EnemyColorCount": 4,
   "EnemyBulletSpeed": 0.28,
   "EnemyShotCooldown": 90,
   "ClearedSpeedBonus": 1.25,

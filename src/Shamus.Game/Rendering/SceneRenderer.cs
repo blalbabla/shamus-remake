@@ -213,7 +213,7 @@ public sealed class SceneRenderer : IDisposable
                 case EnemyKind.SpiralDrone: DrawSpiralDrone(e, world, (float)now); break;
                 default:
                     float hop = MathF.Abs(MathF.Sin((float)now * 6f + e.Phase)) * 0.25f;
-                    Raylib.DrawCube(P(e.X, e.Y, 0.35f + hop), 0.8f, 0.7f, 0.8f, Color.Green);
+                    Raylib.DrawCube(P(e.X, e.Y, 0.35f + hop), 0.8f, 0.7f, 0.8f, EnemyPalette.Of(e.ColorIndex).Body);
                     break;
             }
         }
@@ -222,12 +222,13 @@ public sealed class SceneRenderer : IDisposable
         return mysteryPos;
     }
 
-    /// <summary>Methodical walker: a grey body with a dark head and a single red eye that fires straight ahead.</summary>
+    /// <summary>Methodical walker: a boxy body with a dark head and a single red eye that fires straight ahead.</summary>
     private static void DrawRoboDroid(Enemy e)
     {
+        var p = EnemyPalette.Of(e.ColorIndex);
         // body + head together reach RoomMetrics.EnemyHeight
-        Raylib.DrawCube(P(e.X, e.Y, 0.39f), 0.9f, 0.78f, 0.9f, Color.Gray);
-        Raylib.DrawCube(P(e.X, e.Y, RoomMetrics.RobotEyeY), 0.55f, 0.18f, 0.55f, Color.DarkBlue);
+        Raylib.DrawCube(P(e.X, e.Y, 0.39f), 0.9f, 0.78f, 0.9f, p.Body);
+        Raylib.DrawCube(P(e.X, e.Y, RoomMetrics.RobotEyeY), 0.55f, 0.18f, 0.55f, p.Dark);
         Raylib.DrawCube(P(e.X, e.Y, RoomMetrics.RobotEyeY) + new Vector3(0, 0, 0.29f), 0.4f, 0.09f, 0.05f, Color.Red);
     }
 
@@ -238,10 +239,7 @@ public sealed class SceneRenderer : IDisposable
     /// </summary>
     private static void DrawSpiralDrone(Enemy e, GameWorld world, float time)
     {
-        var saucer = new Color((byte)206, (byte)110, (byte)214, (byte)255);
-        var saucerTop = new Color((byte)232, (byte)150, (byte)240, (byte)255);
-        var tower = new Color((byte)176, (byte)76, (byte)190, (byte)255);
-        var spike = new Color((byte)236, (byte)214, (byte)240, (byte)255);
+        var p = EnemyPalette.Of(e.ColorIndex);
         var slit = new Color((byte)24, (byte)8, (byte)28, (byte)255);
 
         float hover = MathF.Sin(time * 2.2f + e.Phase) * 0.06f;
@@ -254,8 +252,8 @@ public sealed class SceneRenderer : IDisposable
         Rlgl.Rotatef(yaw, 0, 1, 0);
 
         // saucer body, with a slightly wider lighter disc capping it
-        Raylib.DrawCylinder(new Vector3(0, 0.30f, 0), 0.58f, 0.58f, 0.20f, 18, saucer);
-        Raylib.DrawCylinder(new Vector3(0, 0.50f, 0), 0.50f, 0.58f, 0.04f, 18, saucerTop);
+        Raylib.DrawCylinder(new Vector3(0, 0.30f, 0), 0.58f, 0.58f, 0.20f, 18, p.Body);
+        Raylib.DrawCylinder(new Vector3(0, 0.50f, 0), 0.50f, 0.58f, 0.04f, 18, p.Light);
 
         // six spikes around the rim, angled slightly down as in the reference
         for (int i = 0; i < 6; i++)
@@ -263,11 +261,11 @@ public sealed class SceneRenderer : IDisposable
             float a = i * MathF.PI / 3f + 0.26f;
             var dir = new Vector3(MathF.Sin(a), 0f, MathF.Cos(a));
             Raylib.DrawCylinderEx(dir * 0.54f + new Vector3(0f, 0.41f, 0f), dir * 0.88f + new Vector3(0f, 0.36f, 0f),
-                0.055f, 0.004f, 5, spike);
+                0.055f, 0.004f, 5, p.Light);
         }
 
         // tapering tower (truncated cone)
-        Raylib.DrawCylinderEx(new Vector3(0, 0.53f, 0), new Vector3(0, 0.86f, 0), 0.34f, 0.235f, 14, tower);
+        Raylib.DrawCylinderEx(new Vector3(0, 0.53f, 0), new Vector3(0, 0.86f, 0), 0.34f, 0.235f, 14, p.Dark);
 
         // three vertical slits on the face that looks at the player: the gun ports. Their angles match the +-0.35 rad
         // spread of a drone's fan, so the bolts really do leave the slits.

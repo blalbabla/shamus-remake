@@ -17,4 +17,9 @@ public sealed class Enemy
     public float JumpX, JumpY; // snap jumper: unit vector of the next jump
     public bool CanShoot = true;
     public bool Alive = true;
+    /// <summary>
+    /// Palette slot the renderer paints this enemy with. Rolled at spawn so a room shows a mix of colours, exactly
+    /// like the original, where the paint said nothing about behaviour. The kind is read from the shape, not the colour.
+    /// </summary>
+    public int ColorIndex;
 }
