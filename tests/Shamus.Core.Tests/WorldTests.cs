@@ -57,6 +57,55 @@ public class WorldTests
         Assert.Equal(a.Lives, b.Lives);
         Assert.Equal(a.PodOpen, b.PodOpen);
     }
+
+    [Fact]
+    public void FirstPressTurnsInPlaceThenDrives()
+    {
+        var w = new GameWorld(Maze(), new GameConfig(), 3);   // a chamber: the middle band is free to drive along
+        w.Enemies.Clear();
+        float x0 = w.PlayerX, y0 = w.PlayerY;
+        Assert.Equal(90f, w.Heading, 2);                      // starts facing +x
+
+        w.Tick(new InputState(0, 1, false));                  // new direction: a turn, not a step
+        Assert.True(w.Turning);
+        Assert.Equal(x0, w.PlayerX);
+        Assert.Equal(y0, w.PlayerY);
+
+        for (int i = 0; i < 30 && w.Turning; i++) w.Tick(new InputState(0, 1, false));
+        Assert.False(w.Turning);
+        Assert.Equal(0f, w.Heading, 2);                       // now aimed at +y (yaw 0) instead of +x (yaw 90)
+
+        float yAimed = w.PlayerY;
+        w.Tick(new InputState(0, 1, false));                  // held: it drives
+        Assert.True(w.PlayerY > yAimed);
+    }
+
+    [Fact]
+    public void HoldingTheSameDirectionDrivesAtOnce()
+    {
+        var w = new GameWorld(Maze(), new GameConfig(), 3);
+        w.Enemies.Clear();
+        float x0 = w.PlayerX;
+        w.Tick(new InputState(1, 0, false));                  // already facing +x
+        Assert.False(w.Turning);
+        Assert.True(w.PlayerX > x0);
+    }
+
+    [Fact]
+    public void TappingANewDirectionOnlyTurns()
+    {
+        var w = new GameWorld(Maze(), new GameConfig(), 3);
+        w.Enemies.Clear();
+        float x0 = w.PlayerX, y0 = w.PlayerY;
+
+        w.Tick(new InputState(-1, 0, false));                 // one tap to the left
+        Assert.True(w.Turning);
+        for (int i = 0; i < 15; i++) w.Tick(new InputState(0, 0, false));   // key released
+        Assert.False(w.Turning);
+        Assert.Equal(-90f, w.Heading, 2);
+        Assert.Equal(x0, w.PlayerX);                          // it turned, it did not move
+        Assert.Equal(y0, w.PlayerY);
+    }
 }
 
 public class EnemyTests

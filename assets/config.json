@@ -1,6 +1,8 @@
 {
   "StartLives": 5,
   "PlayerSpeed": 0.133,
+  "TurnEasePerTick": 0.45,
+  "TurnToleranceDeg": 9,
   "DroneShooterChance": 0.5,
   "SnapJumpInterval": 60,
   "SnapJumpSpeed": 0.4,

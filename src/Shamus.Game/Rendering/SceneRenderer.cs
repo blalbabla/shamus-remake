@@ -21,12 +21,6 @@ public sealed class SceneRenderer : IDisposable
     private readonly ShadowMap _shadow = new();
     private readonly GlowMap _glow = new();
 
-    /// <summary>Rendered heading of the tank in degrees (local +Z is forward). NaN until the first update.</summary>
-    private float _tankYaw = float.NaN;
-
-    /// <summary>Easing time constant of the heading, seconds: a 180 turn is done in about 0.23 s.</summary>
-    private const float TurnTau = 0.045f;
-
     public SceneRenderer(ViewMode mode = ViewMode.Top)
     {
         Rig = new CameraRig(mode);
@@ -45,31 +39,10 @@ public sealed class SceneRenderer : IDisposable
     private static Vector3 P(float x, float y, float h) => new(Ox + x, h, Oz + y);
 
     /// <summary>
-    /// Eases the rendered heading toward the direction of the last movement. The simulation still snaps
-    /// <c>FaceX/FaceY</c> — shots leave in the pressed direction immediately — so only the model turns smoothly.
-    /// Call once per frame, before any pass draws the tank (the shadow pass draws it too).
+    /// Interpolates the hull heading across the ±180 wrap, the same way positions are interpolated: the heading is
+    /// simulated per tick and the tank turns in place before it drives (see <see cref="GameWorld.Turning"/>).
     /// </summary>
-    public void UpdateTank(GameWorld world, float dt)
-    {
-        var (fx, fy) = Facing(world.FaceX, world.FaceY);
-        float target = MathF.Atan2(fx, fy) * (180f / MathF.PI);
-        if (float.IsNaN(_tankYaw)) { _tankYaw = target; return; }
-
-        float delta = Wrap180(target - _tankYaw);
-        if (MathF.Abs(delta) < 0.3f) { _tankYaw = target; return; }
-        _tankYaw = Wrap180(_tankYaw + delta * (1f - MathF.Exp(-dt / TurnTau)));
-    }
-
-    /// <summary>Drops the eased heading, so a fresh game or respawn starts facing the right way without spinning.</summary>
-    public void ResetTank() => _tankYaw = float.NaN;
-
-    /// <summary>Unit facing direction; falls back to +x before the player has moved.</summary>
-    private static (float X, float Y) Facing(int faceX, int faceY)
-    {
-        float fx = faceX, fy = faceY;
-        float len = MathF.Sqrt(fx * fx + fy * fy);
-        return len < 0.5f ? (1f, 0f) : (fx / len, fy / len);
-    }
+    private static float LerpHeading(float from, float to, float t) => from + Wrap180(to - from) * t;
 
     /// <summary>Wraps an angle in degrees to (-180, 180], so a turn always takes the short way round.</summary>
     private static float Wrap180(float deg)
@@ -150,7 +123,7 @@ public sealed class SceneRenderer : IDisposable
         if (world.Phase != GamePhase.GameOver)
         {
             bool flash = world.Phase == GamePhase.Dying && (world.TickCount / 4) % 2 == 0;
-            DrawTank(px, py, flash);
+            DrawTank(px, py, LerpHeading(world.PrevHeading, world.Heading, alpha), flash);
         }
 
         double now = Raylib.GetTime();
@@ -239,9 +212,9 @@ public sealed class SceneRenderer : IDisposable
     /// <summary>
     /// Hero: a small tank with a boxy hull, two tracks, a dome turret and a gun barrel.
     /// Local Y runs from 0 (tracks on the floor) to <see cref="RoomMetrics.PlayerHeight"/> (top of the dome).
-    /// The heading is <see cref="_tankYaw"/>: <see cref="UpdateTank"/> eases it toward the last movement direction.
+    /// <paramref name="yaw"/> is the simulated hull heading in degrees (local +Z is forward), already interpolated.
     /// </summary>
-    private void DrawTank(float px, float py, bool flash)
+    private static void DrawTank(float px, float py, float yaw, bool flash)
     {
         const float trackH = RoomMetrics.TrackHeight;   // 0.34
         const float trackY = trackH / 2f;               // tracks stand on the floor
@@ -264,7 +237,7 @@ public sealed class SceneRenderer : IDisposable
         var b = P(px, py, 0);
         Rlgl.PushMatrix();
         Rlgl.Translatef(b.X, 0, b.Z);
-        Rlgl.Rotatef(_tankYaw, 0, 1, 0);   // local +Z is forward
+        Rlgl.Rotatef(yaw, 0, 1, 0);   // local +Z is forward
         // tracks, with tread blocks so the silhouette reads as a tracked vehicle, not a box
         Raylib.DrawCube(new Vector3(-0.42f, trackY, 0), 0.20f, trackH, 1.06f, track);
         Raylib.DrawCube(new Vector3(0.42f, trackY, 0), 0.20f, trackH, 1.06f, track);

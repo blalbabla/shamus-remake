@@ -24,6 +24,12 @@ public sealed class GameWorld
     public float PrevPlayerY { get; private set; }
     public int FaceX { get; private set; } = 1;
     public int FaceY { get; private set; }
+    /// <summary>Hull heading in degrees (90 = +x, 180 = +y); eased in place, read by the renderer as is.</summary>
+    public float Heading { get; private set; }
+    /// <summary>Heading before this tick, for render interpolation.</summary>
+    public float PrevHeading { get; private set; }
+    /// <summary>True while the hull is still swinging toward the pressed direction; the tank does not drive then.</summary>
+    public bool Turning { get; private set; }
     public int Lives { get; private set; }
     public GamePhase Phase { get; private set; } = GamePhase.Playing;
     public List<Bullet> Bullets { get; } = new();
@@ -70,6 +76,7 @@ public sealed class GameWorld
     {
         Maze = maze; Config = config; Lives = config.StartLives;
         _rng = new Random(config.Seed);
+        Heading = PrevHeading = HeadingOf(FaceX, FaceY);
         EnterRoom(startRoom, 1.5f, 11f);
     }
 
@@ -256,6 +263,7 @@ public sealed class GameWorld
         }
 
         PrevPlayerX = PlayerX; PrevPlayerY = PlayerY;
+        PrevHeading = Heading;
         if (IsPodRoom && !PodOpen) UpdateSlits();
         MovePlayer(input);
         if (Phase != GamePhase.Playing) return;
@@ -434,6 +442,12 @@ public sealed class GameWorld
     {
         int mx = Math.Sign(input.MoveX), my = Math.Sign(input.MoveY);
         if (mx != 0 || my != 0) { FaceX = mx; FaceY = my; }
+        UpdateHeading();
+
+        // The hull turns in place: while it is still swinging toward the pressed direction the tank does not drive,
+        // so the first tap of a new direction only turns it. Firing is not gated (Fire reads FaceX/FaceY directly).
+        if (Turning) return;
+
         float len = (mx != 0 && my != 0) ? 0.70710678f : 1f;
         float spd = Config.PlayerSpeed * (RoomCleared && !(IsPodRoom && !PodOpen) ? Config.ClearedSpeedBonus : 1f);
         float nx = PlayerX + mx * spd * len, ny = PlayerY + my * spd * len;
@@ -457,6 +471,32 @@ public sealed class GameWorld
         else if (Corridor && PlayerY < 0) EnterRoom(Maze.VerticalLink(Room), PlayerX, RoomGrid.H - 1.5f);
         else if (Corridor && PlayerY >= RoomGrid.H) EnterRoom(Maze.VerticalLink(Room), PlayerX, 1.5f);
         else if (!Corridor && (PlayerY < 0 || PlayerY >= RoomGrid.H)) { if (Config.GodMode) PlayerY = Math.Clamp(PlayerY, 0.5f, RoomGrid.H - 0.5f); else Die(); }
+    }
+
+    /// <summary>
+    /// Eases <see cref="Heading"/> toward the pressed direction (<see cref="FaceX"/>/<see cref="FaceY"/>).
+    /// Run every tick: a key released in the middle of a turn still finishes it, so one tap turns the tank in place.
+    /// Deterministic by construction — a fixed share of the remaining angle per tick, no frame time involved.
+    /// </summary>
+    private void UpdateHeading()
+    {
+        float target = HeadingOf(FaceX, FaceY);
+        float delta = Wrap180(target - Heading);
+        float tolerance = MathF.Max(0.5f, Config.TurnToleranceDeg);
+        Turning = MathF.Abs(delta) > tolerance;
+        if (!Turning) { Heading = target; return; }
+        float ease = Math.Clamp(Config.TurnEasePerTick, 0.05f, 1f);   // a zero ease would freeze the player forever
+        Heading = Wrap180(Heading + delta * ease);
+    }
+
+    /// <summary>Angle of a grid direction in degrees: 90 = +x, 180 = +y, matching the renderer's yaw.</summary>
+    private static float HeadingOf(int faceX, int faceY) => MathF.Atan2(faceX, faceY) * (180f / MathF.PI);
+
+    /// <summary>Wraps an angle in degrees to (-180, 180], so a turn always takes the short way round.</summary>
+    private static float Wrap180(float deg)
+    {
+        deg %= 360f;
+        return deg > 180f ? deg - 360f : deg < -180f ? deg + 360f : deg;
     }
 
     private void Fire()

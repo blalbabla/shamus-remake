@@ -11,6 +11,10 @@ public sealed class GameConfig
     public int StartLives { get; init; } = 5;
     public float PlayerSpeed { get; init; } = 0.133f;
     public float PlayerRadius { get; init; } = 0.4f;
+    /// <summary>Share of the remaining heading error the hull closes per tick (the tank turns in place).</summary>
+    public float TurnEasePerTick { get; init; } = 0.45f;
+    /// <summary>The hull drives only once it is this close to the pressed direction, in degrees.</summary>
+    public float TurnToleranceDeg { get; init; } = 9f;
     public float BulletSpeed { get; init; } = 0.6f;
     public int MaxBullets { get; init; } = 3;
     public int FireCooldown { get; init; } = 8;
