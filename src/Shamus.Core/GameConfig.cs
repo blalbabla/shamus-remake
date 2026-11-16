@@ -41,8 +41,8 @@ public sealed class GameConfig
     public float SnapJumpDistance { get; init; } = 2f;
     /// <summary>Length of the teleport cross-fade: the old spot fades out while the body fades in.</summary>
     public int SnapBlinkTicks { get; init; } = 12;
-    /// <summary>Opacity range a waiting jumper shimmers between (1 = solid, 0.75 = a quarter transparent).</summary>
-    public float SnapJumperAlphaMin { get; init; } = 0.75f;
+    /// <summary>Opacity range a waiting jumper shimmers between (1 = solid, 0.35 = mostly ghost).</summary>
+    public float SnapJumperAlphaMin { get; init; } = 0.35f;
     public float SnapJumperAlphaMax { get; init; } = 1f;
     public int Seed { get; init; } = 1;
     public float EnemyRadius { get; init; } = 0.5f;

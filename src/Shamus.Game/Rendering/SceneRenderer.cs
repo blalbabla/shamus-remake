@@ -162,12 +162,14 @@ public sealed class SceneRenderer : IDisposable
         Rig.BeginView();
         _light.Begin();
         Vector3? mysteryPos = DrawWorld(world, alpha, shadowPass: false);
+        // The jumpers stay inside the lit pass so their facets get real shading, but they never write depth:
+        // a translucent gem that did would punch a hole into the floor behind it.
+        DrawJumpers(world, (float)Raylib.GetTime());
         _light.End();
 
         // Unlit: shells, effects, floor title, pod barriers and the translucent force-field walls.
         DrawShells(world);
         DrawEnemyShells(world);
-        DrawJumpers(world, (float)Raylib.GetTime());
         _fx.Draw();
         _room.DrawTitle(world.Room);
         if (world.IsPodRoom && !world.PodOpen) DrawPodBarriers(world, config);
@@ -213,8 +215,8 @@ public sealed class SceneRenderer : IDisposable
                 case EnemyKind.RoboDroid: DrawRoboDroid(e, alpha, (float)now); break;
                 case EnemyKind.SpiralDrone: DrawSpiralDrone(e, world, (float)now); break;
                 default:
-                    // snap jumper: ghostly and translucent, drawn in the unlit pass; here it only casts a shadow
-                    if (shadowPass) Raylib.DrawCube(P(e.X, e.Y, 0.35f), 0.8f, 0.7f, 0.8f, Color.White);
+                    // snap jumper: a ghostly gem, drawn in the unlit pass; here it only casts a shadow
+                    if (shadowPass) JumperShadow(e);
                     break;
             }
         }
@@ -379,6 +381,9 @@ public sealed class SceneRenderer : IDisposable
         _ => 0.30f,
     };
 
+    /// <summary>Centre height of a snap jumper's gem; the top of the upper cone reaches the enemy height contract.</summary>
+    private const float JumperY = 0.48f;
+
     /// <summary>
     /// Snap jumpers are never solid geometry: they are drawn unlit and translucent. While waiting they shimmer between
     /// SnapJumperAlphaMin and Max; a jump cross-fades, so the ghost at the old spot fades out while the body fades in
@@ -394,11 +399,50 @@ public sealed class SceneRenderer : IDisposable
             if (e.Kind != EnemyKind.SnapJumper) continue;
             var (body, ghost, hop) = JumperFade(e, world.Config, time);
             var paint = EnemyPalette.Of(e.ColorIndex);
-            JumperBody(P(e.BlinkFromX, e.BlinkFromY, 0.35f + hop), ghost * 0.85f, paint.Light, wires: true);
-            JumperBody(P(e.X, e.Y, 0.35f + hop), body, paint.Body, wires: true);
+            JumperModel(P(e.BlinkFromX, e.BlinkFromY, JumperY + hop), ghost * 0.85f, paint, time);
+            JumperModel(P(e.X, e.Y, JumperY + hop), body, paint, time);
         }
         Raylib.EndBlendMode();
         Rlgl.EnableDepthMask();
+    }
+
+    /// <summary>
+    /// The jumper: a floating gem — hexagonal bipyramid — around a bright turning core, with two shards orbiting it.
+    /// Sharp, faceted and clearly not boxy, so it never reads as one of the other two enemies.
+    /// </summary>
+    private static void JumperModel(Vector3 center, float alpha, EnemyPalette.Scheme paint, float time)
+    {
+        if (alpha <= 0.01f) return;
+        byte A(float f) => (byte)(Math.Clamp(alpha * f, 0f, 1f) * 255);
+        var shell = new Color(paint.Body.R, paint.Body.G, paint.Body.B, A(0.8f));
+        var core = new Color(paint.Light.R, paint.Light.G, paint.Light.B, A(0.95f));
+
+        // two cones meeting at the equator = a faceted crystal
+        Raylib.DrawCylinderEx(center + new Vector3(0f, -0.46f, 0f), center, 0.004f, 0.36f, 6, shell);
+        Raylib.DrawCylinderEx(center, center + new Vector3(0f, 0.46f, 0f), 0.36f, 0.004f, 6, shell);
+
+        // the core turns inside the gem
+        Rlgl.PushMatrix();
+        Rlgl.Translatef(center.X, center.Y, center.Z);
+        Rlgl.Rotatef(time * 55f % 360f, 0f, 1f, 0f);
+        Raylib.DrawCube(Vector3.Zero, 0.22f, 0.22f, 0.22f, core);
+        Rlgl.PopMatrix();
+
+        // two shards orbiting the gem, so it is alive even while standing still
+        for (int i = 0; i < 2; i++)
+        {
+            float a = time * 2.6f + i * MathF.PI;
+            var off = new Vector3(MathF.Sin(a) * 0.52f, 0.06f - i * 0.14f, MathF.Cos(a) * 0.52f);
+            Raylib.DrawCube(center + off, 0.12f, 0.12f, 0.12f, core);
+        }
+    }
+
+    /// <summary>Depth-only silhouette of the gem for the shadow pass.</summary>
+    private static void JumperShadow(Enemy e)
+    {
+        var c = P(e.X, e.Y, JumperY);
+        Raylib.DrawCylinderEx(c + new Vector3(0f, -0.46f, 0f), c, 0.004f, 0.36f, 6, Color.White);
+        Raylib.DrawCylinderEx(c, c + new Vector3(0f, 0.46f, 0f), 0.36f, 0.004f, 6, Color.White);
     }
 
     /// <summary>Opacity of a jumper's body and of the ghost left behind, plus its idle bob.</summary>
@@ -411,19 +455,6 @@ public sealed class SceneRenderer : IDisposable
         if (e.BlinkTicks <= 0) return (shimmer, 0f, hop);
         float t = 1f - e.BlinkTicks / (float)Math.Max(1, cfg.SnapBlinkTicks);   // 0 at the jump, 1 when it has landed
         return (t, 1f - t, hop);
-    }
-
-    private static void JumperBody(Vector3 pos, float alpha, Color color, bool wires)
-    {
-        if (alpha <= 0.01f) return;
-        float a = Math.Clamp(alpha, 0f, 1f);
-        var c = new Color(color.R, color.G, color.B, (byte)(a * 255));
-        Raylib.DrawCube(pos, 0.8f, 0.7f, 0.8f, c);
-        // a brighter top face: an unlit cube would otherwise read as a flat hexagon
-        var top = new Color((byte)Math.Min(255, color.R + 50), (byte)Math.Min(255, color.G + 50),
-            (byte)Math.Min(255, color.B + 50), (byte)(a * 255));
-        Raylib.DrawCube(pos + new Vector3(0f, 0.36f, 0f), 0.80f, 0.02f, 0.80f, top);
-        if (wires) Raylib.DrawCubeWires(pos, 0.8f, 0.7f, 0.8f, new Color((byte)235, (byte)235, (byte)255, (byte)(c.A * 0.5f)));
     }
 
     /// <summary>Pod room energy barriers: translucent amber slabs with bright edges (additive, unlit).</summary>
@@ -455,8 +486,8 @@ public sealed class SceneRenderer : IDisposable
             if (e.Kind != EnemyKind.SnapJumper) continue;   // the shimmering jumper glows softly
             var (body, ghost, hop) = JumperFade(e, config, (float)time);
             var paint = EnemyPalette.Of(e.ColorIndex);
-            JumperBody(P(e.BlinkFromX, e.BlinkFromY, 0.35f + hop), ghost * 0.55f, paint.Light, wires: false);
-            JumperBody(P(e.X, e.Y, 0.35f + hop), body * 0.55f, paint.Body, wires: false);
+            JumperModel(P(e.BlinkFromX, e.BlinkFromY, JumperY + hop), ghost * 0.5f, paint, (float)time);
+            JumperModel(P(e.X, e.Y, JumperY + hop), body * 0.5f, paint, (float)time);
         }
         _fx.DrawEmissive();
         if (world.IsPodRoom && !world.PodOpen)

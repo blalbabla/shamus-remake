@@ -8,7 +8,7 @@
   "SnapJumpInterval": 60,
   "SnapJumpDistance": 2,
   "SnapBlinkTicks": 12,
-  "SnapJumperAlphaMin": 0.75,
+  "SnapJumperAlphaMin": 0.35,
   "SnapJumperAlphaMax": 1,
   "PlayerRadius": 0.4,
   "BulletSpeed": 0.6,
