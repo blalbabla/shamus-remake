@@ -21,7 +21,7 @@ public sealed class RoomView : IDisposable
     private static readonly Color FieldPink = new(255, 120, 190, 255);
     private const float FieldHeight = 0.8f;
     private const float FieldThickness = 0.30f;
-    private const byte FieldAlpha = 140;
+    private const byte FieldAlpha = 35;
 
     private const float Ox = -RoomGrid.W / 2f, Oz = -RoomGrid.H / 2f;
     private static Vector3 P(float x, float y, float h) => new(Ox + x, h, Oz + y);
