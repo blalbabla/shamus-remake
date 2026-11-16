@@ -205,9 +205,13 @@ public sealed class GameWorld
             int roll = _rng.Next(level == 0 ? 11 : 12);
             var kind = level == 0 ? (roll < 5 ? EnemyKind.RoboDroid : roll < 9 ? EnemyKind.SpiralDrone : EnemyKind.SnapJumper)
                                   : (roll < 4 ? EnemyKind.RoboDroid : roll < 8 ? EnemyKind.SpiralDrone : EnemyKind.SnapJumper);
+            // droids start aimed at the player, so a fresh room does not begin with a visible turn
+            var (aimX, aimY) = AxisToward(PlayerX - x, PlayerY - y);
+            float aim = HeadingOf(aimX, aimY);
             Enemies.Add(new Enemy { Kind = kind, X = x, Y = y, Phase = (float)_rng.NextDouble() * 6.28f,
                                     ShotCooldown = 30 + _rng.Next(Config.EnemyShotCooldown),
-                                    ColorIndex = _rng.Next(Math.Max(1, Config.EnemyColorCount)) });
+                                    ColorIndex = _rng.Next(Math.Max(1, Config.EnemyColorCount)),
+                                    Heading = aim, PrevHeading = aim });
             var ne = Enemies[^1];
             if (ne.Kind == EnemyKind.SpiralDrone) ne.CanShoot = _rng.NextDouble() < Config.DroneShooterChance;
             else if (ne.Kind == EnemyKind.SnapJumper) ne.CanShoot = false;   // jumpers never shoot
@@ -333,6 +337,7 @@ public sealed class GameWorld
         {
             if (!e.Alive) continue;
             e.Timer++;
+            e.PrevHeading = e.Heading;
             float dx = PlayerX - e.X, dy = PlayerY - e.Y;
             float dist = MathF.Sqrt(dx * dx + dy * dy) + 0.0001f;
             if (e.ModeLeft > 0) e.ModeLeft--; else Decide(e, dx, dy);
@@ -342,6 +347,8 @@ public sealed class GameWorld
                     {
                         float v = 0.036f * spd;
                         if (!Move(e, e.DirX * v, e.DirY * v)) e.ModeLeft = 0; // blocked: decide again next tick
+                        // swing the hull toward the chosen axis with the same easing the player's tank uses
+                        if (e.DirX != 0 || e.DirY != 0) e.Heading = EaseHeading(e.Heading, HeadingOf(e.DirX, e.DirY));
                         break;
                     }
                 case EnemyKind.SpiralDrone: // sways around a heading that may circle or back off
@@ -482,13 +489,25 @@ public sealed class GameWorld
     private void UpdateHeading()
     {
         float target = HeadingOf(FaceX, FaceY);
-        float delta = Wrap180(target - Heading);
         float tolerance = MathF.Max(0.5f, Config.TurnToleranceDeg);
-        Turning = MathF.Abs(delta) > tolerance;
-        if (!Turning) { Heading = target; return; }
-        float ease = Math.Clamp(Config.TurnEasePerTick, 0.05f, 1f);   // a zero ease would freeze the player forever
-        Heading = Wrap180(Heading + delta * ease);
+        Turning = MathF.Abs(Wrap180(target - Heading)) > tolerance;
+        Heading = EaseHeading(Heading, target);
     }
+
+    /// <summary>
+    /// One step of heading easing, shared by the player's hull and the robo-droids: close TurnEasePerTick of the
+    /// remaining angle per tick, and snap once inside TurnToleranceDeg. Deterministic, no frame time involved.
+    /// </summary>
+    private float EaseHeading(float from, float to)
+    {
+        float delta = Wrap180(to - from);
+        if (MathF.Abs(delta) <= MathF.Max(0.5f, Config.TurnToleranceDeg)) return to;
+        return Wrap180(from + delta * Math.Clamp(Config.TurnEasePerTick, 0.05f, 1f));
+    }
+
+    /// <summary>Axis direction from a point toward a target, as the (faceX, faceY) pair headings use.</summary>
+    private static (int X, int Y) AxisToward(float dx, float dy) =>
+        MathF.Abs(dx) >= MathF.Abs(dy) ? (dx >= 0f ? 1 : -1, 0) : (0, dy >= 0f ? 1 : -1);
 
     /// <summary>Angle of a grid direction in degrees: 90 = +x, 180 = +y, matching the renderer's yaw.</summary>
     private static float HeadingOf(int faceX, int faceY) => MathF.Atan2(faceX, faceY) * (180f / MathF.PI);

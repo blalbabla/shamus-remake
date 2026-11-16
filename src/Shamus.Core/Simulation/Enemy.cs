@@ -15,6 +15,13 @@ public sealed class Enemy
     public float Offset;      // angle offset from "straight at player" (circling / retreating)
     public int DirX, DirY;    // current axis direction (robo droid)
     public float JumpX, JumpY; // snap jumper: unit vector of the next jump
+    /// <summary>
+    /// Hull heading in degrees (90 = +x, 0 = +y), eased in place like the player's tank so a robo-droid swings
+    /// around its turn instead of snapping. Only the rendering reads it; movement stays axis-based.
+    /// </summary>
+    public float Heading;
+    /// <summary>Heading before this tick, for render interpolation.</summary>
+    public float PrevHeading;
     public bool CanShoot = true;
     public bool Alive = true;
     /// <summary>

@@ -209,7 +209,7 @@ public sealed class SceneRenderer : IDisposable
         {
             switch (e.Kind)
             {
-                case EnemyKind.RoboDroid: DrawRoboDroid(e, world, (float)now); break;
+                case EnemyKind.RoboDroid: DrawRoboDroid(e, alpha, (float)now); break;
                 case EnemyKind.SpiralDrone: DrawSpiralDrone(e, world, (float)now); break;
                 default:
                     float hop = MathF.Abs(MathF.Sin((float)now * 6f + e.Phase)) * 0.25f;
@@ -227,7 +227,7 @@ public sealed class SceneRenderer : IDisposable
     /// turret that overhangs the tracks. The drum carries a dark groove around its whole diameter; the red beacon runs
     /// along that groove (which is also the gun band — bolts leave the drum at that height).
     /// </summary>
-    private static void DrawRoboDroid(Enemy e, GameWorld world, float time)
+    private static void DrawRoboDroid(Enemy e, float alpha, float time)
     {
         var p = EnemyPalette.Of(e.ColorIndex);
         var track = new Color((byte)96, (byte)98, (byte)104, (byte)255);
@@ -235,8 +235,9 @@ public sealed class SceneRenderer : IDisposable
         var groove = new Color((byte)26, (byte)26, (byte)30, (byte)255);
         const float r = RoomMetrics.RobotTurretRadius;
 
-        // tracks follow the driving direction, so a tracked vehicle never drives sideways
-        float yaw = MathF.Atan2(e.DirX, e.DirY) * (180f / MathF.PI);
+        // the hull swings toward its driving axis with the same easing as the player's tank: the sim owns the angle,
+        // the renderer only interpolates between ticks
+        float yaw = LerpHeading(e.PrevHeading, e.Heading, alpha);
 
         var c = P(e.X, e.Y, 0f);
         Rlgl.PushMatrix();

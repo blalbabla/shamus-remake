@@ -161,6 +161,26 @@ public class EnemyTests
     }
 
     [Fact]
+    public void DroidTurnsSmoothlyInsteadOfSnapping()
+    {
+        var w = new GameWorld(Maze(), new GameConfig(), 3);
+        var droid = w.Enemies.FirstOrDefault(e => e.Kind == EnemyKind.RoboDroid);
+        Assert.NotNull(droid);
+
+        droid!.Heading = droid.PrevHeading = 90f;   // facing +x
+        for (int i = 0; i < 14; i++)
+        {
+            droid.DirX = 0; droid.DirY = -1;        // wants -y, i.e. heading 180
+            droid.ModeLeft = 1000;                  // and must not re-decide under us
+            w.Tick(new InputState(0, 0, false));
+            if (i == 0)
+                Assert.True(droid.Heading > 90f && droid.Heading < 180f,
+                    $"the hull should ease into the turn, got {droid.Heading}");
+        }
+        Assert.Equal(180f, droid.Heading, 1);        // and it does get there
+    }
+
+    [Fact]
     public void EnemyColoursAreRolledAndDeterministic()
     {
         var a = new GameWorld(Maze(), new GameConfig { Seed = 5 }, 3);
