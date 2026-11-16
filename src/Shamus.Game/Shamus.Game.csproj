@@ -17,9 +17,13 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Content Include="..\..\assets\fonts\*" Link="assets\fonts\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
-    <Content Include="..\..\assets\maps\*.map" Link="assets\maps\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
-    <Content Include="..\..\assets\mazes\*.maze" Link="assets\mazes\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <!-- Also copied so that `dotnet publish` ships it: GameApp.ConfigPath falls back to AppContext.BaseDirectory
+         when no source tree (a directory with both assets and src) is found. In a dev run the source-tree copy
+         still wins, so editing assets/config.json keeps working without a rebuild. -->
+    <Content Include="..\..\assets\config.json" Link="assets\config.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="..\..\assets\fonts\*" Link="assets\fonts\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="..\..\assets\maps\*.map" Link="assets\maps\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="..\..\assets\mazes\*.maze" Link="assets\mazes\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>
