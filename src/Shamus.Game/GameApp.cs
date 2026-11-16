@@ -265,7 +265,11 @@ public sealed class GameApp
 
             // Shadow map first: it switches framebuffers and resets matrices, so it runs before the letterbox setup.
             if (_state is not (AppState.Title or AppState.Settings))
-                _scene.RenderShadow(_world, _state == AppState.Playing ? _acc / Step : 1f);
+            {
+                float alpha = _state == AppState.Playing ? _acc / Step : 1f;
+                _scene.RenderShadow(_world, alpha);
+                _scene.RenderGlow(_world, _config);
+            }
 
             // Render at the window's native resolution, letterboxed to the fixed 16:9 design space
             // (so MSAA stays active and fullscreen uses the display resolution).

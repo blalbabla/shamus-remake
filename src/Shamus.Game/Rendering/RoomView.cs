@@ -16,10 +16,10 @@ public sealed class RoomView : IDisposable
         new(255, 70, 25, 255), new(70, 130, 255, 255), new(70, 255, 110, 255), new(255, 60, 70, 255),
     };
     private static readonly Color FloorColor = new(34, 36, 46, 255), ClosedColor = new(18, 18, 26, 255);
-    private static readonly Color PostBody = new(46, 88, 235, 255), PostTop = new(110, 160, 255, 255), PostEdge = new(20, 40, 130, 255);
+    private static readonly Color PostBody = new(46, 88, 235, 255), PostTop = new(110, 160, 255, 255);
     // the electrified walls are pink force fields
     private static readonly Color FieldPink = new(255, 120, 190, 255);
-    private const float FieldHeight = 0.8f;
+    private const float FieldHeight = RoomMetrics.WallHeight;
     private const float FieldThickness = 0.30f;
     private const byte FieldAlpha = 35;
 
@@ -108,11 +108,10 @@ public sealed class RoomView : IDisposable
 
         foreach (var (x, y) in walls.Posts)
         {
-            var c = P(x, y, 0.4f);
-            Raylib.DrawCube(c, 0.9f, 0.8f, 0.9f, PostBody);
-            Raylib.DrawCube(P(x, y, 0.82f), 0.9f, 0.04f, 0.9f, PostTop);                       // solid lighter top face
-            //Raylib.DrawCubeWires(c, 0.9f, 1.6f, 0.9f, PostEdge);
-            Raylib.DrawCube(P(x, y, 0.88f), 0.4f, 0.1f, 0.4f, Brighten(neon, 0.75f + 0.25f * pulse));   // solid neon cap
+            var c = P(x, y, RoomMetrics.WallHeight / 2f);
+            Raylib.DrawCube(c, RoomMetrics.PostSize, RoomMetrics.WallHeight, RoomMetrics.PostSize, PostBody);
+            Raylib.DrawCube(P(x, y, RoomMetrics.WallHeight + 0.02f), RoomMetrics.PostSize, 0.04f, RoomMetrics.PostSize, PostTop);   // solid lighter top face
+            Raylib.DrawCube(P(x, y, RoomMetrics.WallHeight + 0.07f), 0.4f, 0.1f, 0.4f, Brighten(neon, 0.75f + 0.25f * pulse));    // solid neon cap
         }
     }
 
@@ -134,6 +133,28 @@ public sealed class RoomView : IDisposable
         }
         Raylib.EndBlendMode();
         Rlgl.EnableDepthMask();
+    }
+
+    /// <summary>
+    /// Emissive parts of the room for the glow pass: the neon caps of the generators, the force-field panels and
+    /// their bright rims. Drawn additively into the glow target, which is why the panel is brighter here than in
+    /// <see cref="DrawWalls"/>: the blur spreads it into a halo around the wall.
+    /// </summary>
+    public void DrawEmissive(RoomGrid grid, int level, double time, Color? doorColor, int doorSide)
+    {
+        var neon = Neon[Math.Clamp(level, 0, 3)];
+        var walls = grid.Walls;
+        float pulse = 0.85f + 0.15f * MathF.Sin((float)time * 3f);
+
+        foreach (var (x, y) in walls.Posts)
+            Raylib.DrawCube(P(x, y, RoomMetrics.WallHeight + 0.07f), 0.45f, 0.12f, 0.45f, Brighten(neon, 0.9f + 0.3f * pulse));
+
+        foreach (var s in walls.Segments)
+        {
+            var col = IsDoor(s, doorSide) && doorColor is Color dc ? dc : FieldPink;
+            Field(s, new Color(col.R, col.G, col.B, (byte)95));
+            FieldEdge(s, new Color((byte)255, (byte)215, (byte)240, (byte)255));
+        }
     }
 
     private static bool IsDoor(WallSegment s, int doorSide)

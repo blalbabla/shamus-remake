@@ -5,11 +5,11 @@ namespace Shamus.Game.Rendering;
 
 /// <summary>
 /// Directional-light shadow map: a depth-only framebuffer rendered from an orthographic camera placed along the
-/// light direction. The room is small and flat, so a fixed 1024 map and a box fitted around the whole level suffice.
+/// light direction. The room is small and flat, so a fixed 2048 map and a box fitted around the whole level suffice.
 /// </summary>
 public sealed class ShadowMap : IDisposable
 {
-    public const int MapSize = 1024;
+    public const int MapSize = 2048;
     private const float LightDistance = 60f;
     private const float NearPlane = 1f;
     private const float FarPlane = 160f;

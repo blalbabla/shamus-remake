@@ -49,7 +49,8 @@ public sealed class LightingShader : IDisposable
         uniform float shadowTexel;
         out vec4 finalColor;
 
-        // 1.0 = lit, 0.0 = fully in shadow. PCF over a 3x3 kernel for soft edges.
+        // 1.0 = lit, 0.0 = fully in shadow. 5x5 PCF with a radial (gaussian-ish) weight: a wider, softer
+        // penumbra than the 3x3 box it replaces, while the 2048 map keeps small casters from getting mushy.
         float shadowFactor(vec3 n)
         {
             if (shadows == 0) return 1.0;
@@ -58,15 +59,19 @@ public sealed class LightingShader : IDisposable
             vec4 lp = lightVP * vec4(fragPos + n * 0.02, 1.0);
             vec3 pc = lp.xyz / lp.w * 0.5 + 0.5;
             if (pc.x < 0.0 || pc.x > 1.0 || pc.y < 0.0 || pc.y > 1.0 || pc.z > 1.0) return 1.0;
-            float bias = 0.0006 + 0.0016 * (1.0 - ndl);
-            float lit = 0.0;
-            for (int x = -1; x <= 1; x++)
-                for (int y = -1; y <= 1; y++)
+            float bias = 0.0004 + 0.0012 * (1.0 - ndl);
+            float lit = 0.0, weight = 0.0;
+            for (int x = -2; x <= 2; x++)
+                for (int y = -2; y <= 2; y++)
                 {
-                    float d = texture(shadowMap, pc.xy + vec2(x, y) * shadowTexel * 1.3).r;
-                    lit += pc.z - bias > d ? 0.0 : 1.0;
+                    vec2 off = vec2(x, y);
+                    float w = 1.0 - length(off) * 0.3;
+                    if (w <= 0.0) continue;
+                    float d = texture(shadowMap, pc.xy + off * shadowTexel * 1.6).r;
+                    lit += (pc.z - bias > d ? 0.0 : 1.0) * w;
+                    weight += w;
                 }
-            return lit / 9.0;
+            return lit / weight;
         }
 
         void main()

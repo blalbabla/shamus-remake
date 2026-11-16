@@ -19,6 +19,7 @@ public sealed class SceneRenderer : IDisposable
     private readonly RoomView _room = new();
     private readonly LightingShader _light = new();
     private readonly ShadowMap _shadow = new();
+    private readonly GlowMap _glow = new();
 
     public SceneRenderer(ViewMode mode = ViewMode.Top)
     {
@@ -30,6 +31,7 @@ public sealed class SceneRenderer : IDisposable
     {
         _light.Dispose();
         _shadow.Dispose();
+        _glow.Dispose();
         _room.Dispose();
     }
 
@@ -43,6 +45,23 @@ public sealed class SceneRenderer : IDisposable
         _shadow.Begin(_light.LightDirection);
         DrawWorld(world, alpha, shadowPass: true);
         _shadow.End();
+    }
+
+    /// <summary>
+    /// Renders only the emitters into the glow target and blurs them; call once per frame before <see cref="Draw"/>,
+    /// because it switches framebuffers and resets matrices just like the shadow pass.
+    /// </summary>
+    public void RenderGlow(GameWorld world, GameConfig config)
+    {
+        if (!_glow.IsValid) return;
+        _glow.BeginEmitters();
+        Rig.BeginView();
+        Rlgl.DisableDepthTest();   // additive light only: there is nothing in this target to occlude against
+        Raylib.BeginBlendMode(BlendMode.Additive);   // emitters accumulate, so their alpha reads as intensity
+        DrawEmissive(world, config);
+        Raylib.EndBlendMode();
+        Rig.EndView();
+        _glow.EndEmitters();
     }
 
     /// <summary>Renders the lit world, then unlit translucent overlays and the 2D "?" label.</summary>
@@ -62,6 +81,9 @@ public sealed class SceneRenderer : IDisposable
         if (world.IsPodRoom && !world.PodOpen) DrawPodBarriers(world, config);
         _room.DrawWalls(world.Grid, doorColor, doorSide);
         Rig.EndView();
+
+        // Bloom is a 2D additive pass, so it needs the 1280x720 UI projection back.
+        _glow.Composite();
 
         if (mysteryPos is Vector3 mp)
         {
@@ -94,34 +116,28 @@ public sealed class SceneRenderer : IDisposable
         double now = Raylib.GetTime();
         foreach (var e in world.Enemies)
         {
-            var c = P(e.X, e.Y, 0.8f);
             switch (e.Kind)
             {
                 case EnemyKind.RoboDroid:
-                    Raylib.DrawCube(c, 0.9f, 1.2f, 0.9f, Color.Gray);
-                    Raylib.DrawCube(c + new Vector3(0, 0.8f, 0), 0.6f, 0.4f, 0.6f, Color.DarkBlue);
-                    Raylib.DrawCube(c + new Vector3(0, 0.85f, 0.31f), 0.4f, 0.12f, 0.05f, Color.Red);
+                    // body + head together reach RoomMetrics.EnemyHeight
+                    Raylib.DrawCube(P(e.X, e.Y, 0.39f), 0.9f, 0.78f, 0.9f, Color.Gray);
+                    Raylib.DrawCube(P(e.X, e.Y, 0.87f), 0.55f, 0.18f, 0.55f, Color.DarkBlue);
+                    Raylib.DrawCube(P(e.X, e.Y, 0.87f) + new Vector3(0, 0, 0.29f), 0.4f, 0.09f, 0.05f, Color.Red);
                     break;
                 case EnemyKind.SpiralDrone:
-                    Raylib.DrawSphere(c, 0.5f, Color.Magenta);
-                    Raylib.DrawCube(c, 1.3f, 0.1f, 0.1f, Color.Purple);
+                    float hover = MathF.Sin((float)now * 2.2f + e.Phase) * 0.06f;
+                    Raylib.DrawSphere(P(e.X, e.Y, 0.48f + hover), 0.42f, Color.Magenta);
+                    Raylib.DrawCube(P(e.X, e.Y, 0.48f + hover), 1.2f, 0.09f, 0.09f, Color.Purple);
                     break;
                 default:
-                    float hop = MathF.Abs(MathF.Sin((float)now * 6f + e.Phase)) * 0.4f;
-                    Raylib.DrawCube(c + new Vector3(0, hop - 0.2f, 0), 0.8f, 0.7f, 0.8f, Color.Green);
+                    float hop = MathF.Abs(MathF.Sin((float)now * 6f + e.Phase)) * 0.25f;
+                    Raylib.DrawCube(P(e.X, e.Y, 0.35f + hop), 0.8f, 0.7f, 0.8f, Color.Green);
                     break;
             }
         }
-        if (world.ShadowActive)
-        {
-            var sp = P(world.ShadowX, world.ShadowY, 0.9f);
-            Raylib.DrawCylinder(sp + new Vector3(0, -0.9f, 0), 0.45f, 0.65f, 1.8f, 10, new Color(30, 15, 50, 255));
-            Raylib.DrawSphere(sp + new Vector3(0, 1.0f, 0), 0.45f, new Color(20, 8, 35, 255));
-            Raylib.DrawCube(sp + new Vector3(-0.16f, 1.05f, 0.38f), 0.14f, 0.08f, 0.05f, Color.Red);
-            Raylib.DrawCube(sp + new Vector3(0.16f, 1.05f, 0.38f), 0.14f, 0.08f, 0.05f, Color.Red);
-        }
-        foreach (var b in world.EnemyBullets) Raylib.DrawSphere(P(b.X, b.Y, 0.9f), 0.2f, Color.Orange);
-        foreach (var b in world.Bullets) Raylib.DrawSphere(P(b.X, b.Y, 0.9f), 0.22f, Color.SkyBlue);
+        if (world.ShadowActive) DrawShadow(P(world.ShadowX, world.ShadowY, 0f));
+        foreach (var b in world.EnemyBullets) Raylib.DrawSphere(P(b.X, b.Y, RoomMetrics.BulletY), 0.2f, Color.Orange);
+        foreach (var b in world.Bullets) Raylib.DrawSphere(P(b.X, b.Y, RoomMetrics.BulletY), 0.22f, Color.SkyBlue);
 
         return mysteryPos;
     }
@@ -132,24 +148,58 @@ public sealed class SceneRenderer : IDisposable
         Rlgl.DrawRenderBatchActive();   // flush opaque geometry before depth writes are disabled
         Rlgl.DisableDepthMask();
         Raylib.BeginBlendMode(BlendMode.Additive);
+        BarrierBoxes(world, config, new Color((byte)255, (byte)190, (byte)30, (byte)70),
+            new Color((byte)255, (byte)230, (byte)120, (byte)200), wires: true);
+        Raylib.EndBlendMode();
+        Rlgl.EnableDepthMask();
+    }
+
+    /// <summary>Emitters for the glow pass. Bright, unlit colours: the blur turns them into halos.</summary>
+    private void DrawEmissive(GameWorld world, GameConfig config)
+    {
+        int level = world.Maze.Level(world.Room);
+        double time = Raylib.GetTime();
+        Color? doorColor = world.DoorClosed && world.Obj != null ? AtariPalette.ToColor(world.Obj.Hue, world.Obj.Luma) : null;
+
+        _room.DrawEmissive(world.Grid, level, time, doorColor, world.DoorClosed ? world.DoorSide : 0);
+        if (world.IsPodRoom && !world.PodOpen)
+            BarrierBoxes(world, config, new Color((byte)255, (byte)200, (byte)60, (byte)110),
+                new Color((byte)255, (byte)240, (byte)160, (byte)255), wires: false);
+
+        if (world.Obj is { Kind: ObjectKind.Mystery } o)
+            Raylib.DrawCube(P(o.X, o.Y, 0.45f), 0.85f, 0.85f, 0.85f, new Color((byte)190, (byte)120, (byte)255, (byte)255));
+        if (world.ShadowActive)
+        {
+            float bodyH = RoomMetrics.ShadowHeight - 0.4f;
+            var feet = P(world.ShadowX, world.ShadowY, 0f);
+            Raylib.DrawCube(feet + new Vector3(-0.15f, bodyH + 0.28f, 0.40f), 0.2f, 0.12f, 0.1f, new Color((byte)255, (byte)40, (byte)40, (byte)255));
+            Raylib.DrawCube(feet + new Vector3(0.15f, bodyH + 0.28f, 0.40f), 0.2f, 0.12f, 0.1f, new Color((byte)255, (byte)40, (byte)40, (byte)255));
+        }
+        foreach (var b in world.EnemyBullets) Raylib.DrawSphere(P(b.X, b.Y, RoomMetrics.BulletY), 0.3f, new Color((byte)255, (byte)150, (byte)40, (byte)255));
+        foreach (var b in world.Bullets) Raylib.DrawSphere(P(b.X, b.Y, RoomMetrics.BulletY), 0.32f, new Color((byte)120, (byte)210, (byte)255, (byte)255));
+    }
+
+    /// <summary>The two pod barriers of the room, each split into a slab above and below the moving slit.</summary>
+    private static void BarrierBoxes(GameWorld world, GameConfig config, Color fill, Color edge, bool wires)
+    {
         for (int i = 0; i < 2; i++)
         {
             float bx = config.PodBarrierX0[i] + config.PodBarrierWidth / 2f;
             float s0 = world.SlitY[i], sh = config.PodSlitHeight;
             float topH = s0 - 1f, botY0 = s0 + sh, botH = RoomGrid.H - 1f - botY0;
-            var fill = new Color((byte)255, (byte)190, (byte)30, (byte)70);
-            var edge = new Color((byte)255, (byte)230, (byte)120, (byte)200);
+            float by = RoomMetrics.PodBarrierHeight / 2f;
             foreach (var (cy, hh) in new[] { (1f + topH / 2f, topH), (botY0 + botH / 2f, botH) })
             {
-                Raylib.DrawCube(P(bx, cy, 0.8f), config.PodBarrierWidth, 1.6f, hh, fill);
-                Raylib.DrawCubeWires(P(bx, cy, 0.8f), config.PodBarrierWidth, 1.6f, hh, edge);
+                Raylib.DrawCube(P(bx, cy, by), config.PodBarrierWidth, RoomMetrics.PodBarrierHeight, hh, fill);
+                if (wires) Raylib.DrawCubeWires(P(bx, cy, by), config.PodBarrierWidth, RoomMetrics.PodBarrierHeight, hh, edge);
             }
         }
-        Raylib.EndBlendMode();
-        Rlgl.EnableDepthMask();
     }
 
-    /// <summary>Hero: a small tank with a boxy hull, two tracks, a dome turret and a gun barrel.</summary>
+    /// <summary>
+    /// Hero: a small tank with a boxy hull, two tracks, a dome turret and a gun barrel.
+    /// Local Y runs from 0 (tracks on the floor) to <see cref="RoomMetrics.PlayerHeight"/> (top of the dome).
+    /// </summary>
     private static void DrawTank(float px, float py, int faceX, int faceY, bool flash)
     {
         float fx = faceX, fy = faceY;
@@ -159,7 +209,10 @@ public sealed class SceneRenderer : IDisposable
         float yaw = MathF.Atan2(fx, fy) * (180f / MathF.PI);
 
         var hull = flash ? Color.White : new Color((byte)86, (byte)150, (byte)86, (byte)255);
+        var hullTop = flash ? Color.White : new Color((byte)108, (byte)176, (byte)104, (byte)255);
         var track = flash ? Color.White : new Color((byte)80, (byte)82, (byte)95, (byte)255);
+        var tread = flash ? Color.White : new Color((byte)54, (byte)56, (byte)66, (byte)255);
+        var turret = flash ? Color.White : new Color((byte)150, (byte)205, (byte)130, (byte)255);
         var dome = flash ? Color.White : new Color((byte)170, (byte)225, (byte)150, (byte)255);
         var gun = flash ? Color.White : new Color((byte)120, (byte)122, (byte)135, (byte)255);
 
@@ -167,45 +220,67 @@ public sealed class SceneRenderer : IDisposable
         Rlgl.PushMatrix();
         Rlgl.Translatef(b.X, 0, b.Z);
         Rlgl.Rotatef(yaw, 0, 1, 0);   // local +Z is forward
-        Raylib.DrawCube(new Vector3(-0.46f, 0.17f, 0), 0.20f, 0.34f, 1.10f, track);
-        Raylib.DrawCube(new Vector3(0.46f, 0.17f, 0), 0.20f, 0.34f, 1.10f, track);
-        Raylib.DrawCube(new Vector3(0, 0.38f, 0), 0.72f, 0.32f, 0.96f, hull);
-        Raylib.DrawCylinder(new Vector3(0, 0.56f, -0.02f), 0.24f, 0.26f, 0.08f, 12, new Color((byte)150, (byte)205, (byte)130, (byte)255));
-        Raylib.DrawSphere(new Vector3(0, 0.62f, -0.02f), 0.30f, dome);
-        Raylib.DrawCylinderEx(new Vector3(0, 0.64f, 0.10f), new Vector3(0, 0.64f, 0.80f), 0.065f, 0.055f, 10, gun);
+        // tracks, with tread blocks so the silhouette reads as a tracked vehicle, not a box
+        Raylib.DrawCube(new Vector3(-0.42f, 0.17f, 0), 0.20f, 0.34f, 1.06f, track);
+        Raylib.DrawCube(new Vector3(0.42f, 0.17f, 0), 0.20f, 0.34f, 1.06f, track);
+        for (int i = -1; i <= 1; i++)
+        {
+            Raylib.DrawCube(new Vector3(-0.42f, 0.17f, i * 0.34f), 0.22f, 0.10f, 0.12f, tread);
+            Raylib.DrawCube(new Vector3(0.42f, 0.17f, i * 0.34f), 0.22f, 0.10f, 0.12f, tread);
+        }
+        // hull, then a slightly lighter top plate
+        Raylib.DrawCube(new Vector3(0, 0.44f, 0), 0.68f, 0.30f, 0.94f, hull);
+        Raylib.DrawCube(new Vector3(0, 0.60f, -0.02f), 0.56f, 0.06f, 0.80f, hullTop);
+        // turret ring, small dome, barrel pointing forward
+        Raylib.DrawCylinder(new Vector3(0, 0.66f, 0), 0.23f, 0.24f, 0.08f, 14, turret);
+        Raylib.DrawSphere(new Vector3(0, 0.70f, 0), 0.20f, dome);
+        Raylib.DrawCylinderEx(new Vector3(0, 0.70f, 0.14f), new Vector3(0, 0.70f, 0.74f), 0.055f, 0.045f, 10, gun);
         Rlgl.PopMatrix();
+    }
+
+    /// <summary>The Shadow: a dark column with a hooded head, deliberately taller than the walls (its feet are at y = 0).</summary>
+    private static void DrawShadow(Vector3 feet)
+    {
+        var body = new Color(30, 15, 50, 255);
+        var head = new Color(20, 8, 35, 255);
+        float bodyH = RoomMetrics.ShadowHeight - 0.4f;
+        Raylib.DrawCylinder(feet + new Vector3(0, bodyH / 2f, 0), 0.45f, 0.65f, bodyH, 10, body);
+        Raylib.DrawSphere(feet + new Vector3(0, bodyH + 0.24f, 0), 0.4f, head);
+        // eyes sit on the front of the head sphere (radius 0.4 at that height), so they are not buried inside it
+        Raylib.DrawCube(feet + new Vector3(-0.15f, bodyH + 0.28f, 0.40f), 0.16f, 0.09f, 0.08f, Color.Red);
+        Raylib.DrawCube(feet + new Vector3(0.15f, bodyH + 0.28f, 0.40f), 0.16f, 0.09f, 0.08f, Color.Red);
     }
 
     private static Vector3? DrawObject(RoomObject o)
     {
         Vector3? mystery = null;
         var oc = AtariPalette.ToColor(o.Hue, o.Luma);
-        var op = P(o.X, o.Y, 0.8f);
-        float bob = MathF.Sin((float)Raylib.GetTime() * 3f) * 0.12f;
+        float bob = MathF.Sin((float)Raylib.GetTime() * 3f) * 0.1f;
         switch (o.Kind)
         {
             case ObjectKind.Key:
-                Raylib.DrawSphere(op + new Vector3(-0.5f, bob, 0), 0.35f, oc);
-                Raylib.DrawCube(op + new Vector3(0.1f, bob, 0), 1.0f, 0.18f, 0.18f, oc);
-                Raylib.DrawCube(op + new Vector3(0.45f, bob, 0.2f), 0.15f, 0.18f, 0.4f, oc);
+                var kp = P(o.X, o.Y, 0.5f + bob);
+                Raylib.DrawSphere(kp + new Vector3(-0.45f, 0, 0), 0.32f, oc);
+                Raylib.DrawCube(kp + new Vector3(0.1f, 0, 0), 1.0f, 0.16f, 0.16f, oc);
+                Raylib.DrawCube(kp + new Vector3(0.45f, 0, 0.18f), 0.14f, 0.16f, 0.36f, oc);
                 break;
             case ObjectKind.Keyhole:
-                Raylib.DrawCube(op, 1.0f, 1.2f, 1.0f, oc);
-                Raylib.DrawCube(op + new Vector3(0, 0.62f, 0), 0.25f, 0.05f, 0.6f, Color.Black);
+                var hp = P(o.X, o.Y, 0f);
+                Raylib.DrawCube(hp + new Vector3(0, 0.4f, 0), 1.0f, 0.8f, 1.0f, oc);
+                Raylib.DrawCube(hp + new Vector3(0, 0.83f, 0), 0.25f, 0.05f, 0.6f, Color.Black);
                 break;
             case ObjectKind.Potion:
-                Raylib.DrawSphere(op + new Vector3(0, bob, 0), 0.45f, new Color(120, 230, 150, 255));
-                Raylib.DrawCylinder(op + new Vector3(0, 0.3f + bob, 0), 0.12f, 0.12f, 0.6f, 8, Color.LightGray);
+                var pp = P(o.X, o.Y, 0.4f + bob);
+                Raylib.DrawSphere(pp, 0.4f, new Color(120, 230, 150, 255));
+                Raylib.DrawCylinder(pp + new Vector3(0, 0.3f, 0), 0.12f, 0.12f, 0.2f, 8, Color.LightGray);
                 break;
             case ObjectKind.Shadow:
-                Raylib.DrawCylinder(op + new Vector3(0, -0.3f, 0), 0.5f, 0.7f, 1.8f, 10, new Color(40, 20, 60, 255));
-                Raylib.DrawSphere(op + new Vector3(0, 1.0f, 0), 0.5f, new Color(25, 10, 40, 255));
-                Raylib.DrawCube(op + new Vector3(-0.18f, 1.05f, 0.4f), 0.15f, 0.08f, 0.05f, Color.Red);
-                Raylib.DrawCube(op + new Vector3(0.18f, 1.05f, 0.4f), 0.15f, 0.08f, 0.05f, Color.Red);
+                DrawShadow(P(o.X, o.Y, 0f));
                 break;
             case ObjectKind.Mystery:
-                Raylib.DrawCube(op + new Vector3(0, bob, 0), 0.9f, 0.9f, 0.9f, new Color(150, 80, 220, 255));
-                mystery = op + new Vector3(0, 1.0f, 0);
+                var mp = P(o.X, o.Y, 0.45f + bob);
+                Raylib.DrawCube(mp, 0.8f, 0.8f, 0.8f, new Color(150, 80, 220, 255));
+                mystery = mp + new Vector3(0, 0.5f, 0);
                 break;
         }
         return mystery;
