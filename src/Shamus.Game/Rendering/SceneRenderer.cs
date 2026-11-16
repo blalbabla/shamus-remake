@@ -252,8 +252,8 @@ public sealed class SceneRenderer : IDisposable
         Raylib.DrawCube(new Vector3(0f, 0.33f, 0f), 0.74f, 0.18f, 0.88f, p.Body);
 
         // the turret drum overhangs the tracks; a lighter disc caps it
-        Raylib.DrawCylinder(new Vector3(0f, 0.42f, 0f), r, r, 0.32f, 16, p.Body);
-        Raylib.DrawCylinder(new Vector3(0f, 0.735f, 0f), r, r * 0.96f, 0.03f, 16, p.Light);
+        Raylib.DrawCylinder(new Vector3(0f, 0.40f, 0f), r, r, 0.38f, 16, p.Body);
+        Raylib.DrawCylinder(new Vector3(0f, 0.775f, 0f), r, r * 0.96f, 0.03f, 16, p.Light);
 
         // dark groove all the way round, at the height the bolts leave from
         Raylib.DrawCylinder(new Vector3(0f, RoomMetrics.RobotMuzzleY - 0.045f, 0f), r + 0.006f, r + 0.006f, 0.09f, 16, groove);
