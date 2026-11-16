@@ -8,8 +8,9 @@ public sealed class Enemy
     public float X, Y;
     public float Phase;       // spiral phase / snap timer
     public int Timer;         // generic tick counter
-    public int DashLeft;      // snap jumper dash ticks left
-    public float DashX, DashY;
+    /// <summary>Where a snap jumper blinked from, and how many ticks of the cross-fade are left. Rendering only.</summary>
+    public float BlinkFromX, BlinkFromY;
+    public int BlinkTicks;
     public int ShotCooldown;
     public int ModeLeft;      // ticks until the next behaviour decision
     public float Offset;      // angle offset from "straight at player" (circling / retreating)

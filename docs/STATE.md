@@ -222,6 +222,12 @@ artifacts/                       исходники (ATR, PDF, скриншот�
   доворачивается общим `EaseHeading` (`TurnEasePerTick` / `TurnToleranceDeg`), рендер только интерполирует угол.
   Цель — ось движения (`DirX/DirY`), при появлении робот уже смотрит в сторону игрока (`AxisToward`).
   Новый тест `DroidTurnsSmoothlyInsteadOfSnapping`.
+- Snap Jumper: прыжок стал настоящим телепортом (раньше был очень быстрый рывок за 5 тиков — для кросс-фейда
+  нужны две разные точки). Раз в `SnapJumpInterval` = 60 тиков он переносится на `SnapJumpDistance` = 2 клетки
+  (с проверкой `OpenArea`), запоминая `BlinkFromX/Y` и `BlinkTicks`. Эффекты: в покое куб мерцает по прозрачности
+  между `SnapJumperAlphaMin` = 0.75 и `SnapJumperAlphaMax` = 1.0; на прыжке тело проявляется 0 → 1, а призрак на
+  старом месте гаснет 1 → 0 за `SnapBlinkTicks` = 12 тиков. Рисуется в неосвещённом проходе без записи глубины
+  (плюс слабый glow), но остаётся кастером тени. Новый тест `BlinksWithoutSliding`.
 - `assets/config.json` добавлен в `<Content>` и копируется в выходной каталог и в publish; dev-запуск
   по-прежнему читает исходное дерево (проверено правкой `StartLives` без пересборки).
 - Убран неиспользуемый `AudioManager._frame` (единственный warning сборки — теперь 0 warnings).

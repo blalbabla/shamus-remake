@@ -167,6 +167,7 @@ public sealed class SceneRenderer : IDisposable
         // Unlit: shells, effects, floor title, pod barriers and the translucent force-field walls.
         DrawShells(world);
         DrawEnemyShells(world);
+        DrawJumpers(world, (float)Raylib.GetTime());
         _fx.Draw();
         _room.DrawTitle(world.Room);
         if (world.IsPodRoom && !world.PodOpen) DrawPodBarriers(world, config);
@@ -212,8 +213,8 @@ public sealed class SceneRenderer : IDisposable
                 case EnemyKind.RoboDroid: DrawRoboDroid(e, alpha, (float)now); break;
                 case EnemyKind.SpiralDrone: DrawSpiralDrone(e, world, (float)now); break;
                 default:
-                    float hop = MathF.Abs(MathF.Sin((float)now * 6f + e.Phase)) * 0.25f;
-                    Raylib.DrawCube(P(e.X, e.Y, 0.35f + hop), 0.8f, 0.7f, 0.8f, EnemyPalette.Of(e.ColorIndex).Body);
+                    // snap jumper: ghostly and translucent, drawn in the unlit pass; here it only casts a shadow
+                    if (shadowPass) Raylib.DrawCube(P(e.X, e.Y, 0.35f), 0.8f, 0.7f, 0.8f, Color.White);
                     break;
             }
         }
@@ -378,6 +379,53 @@ public sealed class SceneRenderer : IDisposable
         _ => 0.30f,
     };
 
+    /// <summary>
+    /// Snap jumpers are never solid geometry: they are drawn unlit and translucent. While waiting they shimmer between
+    /// SnapJumperAlphaMin and Max; a jump cross-fades, so the ghost at the old spot fades out while the body fades in
+    /// at the new one. The ghost is drawn first, dimmer, so the body always reads as the real one.
+    /// </summary>
+    private static void DrawJumpers(GameWorld world, float time)
+    {
+        Rlgl.DrawRenderBatchActive();
+        Rlgl.DisableDepthMask();   // a fading body must not punch a hole in the depth buffer
+        Raylib.BeginBlendMode(BlendMode.Alpha);
+        foreach (var e in world.Enemies)
+        {
+            if (e.Kind != EnemyKind.SnapJumper) continue;
+            var (body, ghost, hop) = JumperFade(e, world.Config, time);
+            var paint = EnemyPalette.Of(e.ColorIndex);
+            JumperBody(P(e.BlinkFromX, e.BlinkFromY, 0.35f + hop), ghost * 0.85f, paint.Light, wires: true);
+            JumperBody(P(e.X, e.Y, 0.35f + hop), body, paint.Body, wires: true);
+        }
+        Raylib.EndBlendMode();
+        Rlgl.EnableDepthMask();
+    }
+
+    /// <summary>Opacity of a jumper's body and of the ghost left behind, plus its idle bob.</summary>
+    private static (float Body, float Ghost, float Hop) JumperFade(Enemy e, GameConfig cfg, float time)
+    {
+        float min = Math.Clamp(cfg.SnapJumperAlphaMin, 0f, 1f);
+        float max = Math.Clamp(cfg.SnapJumperAlphaMax, min, 1f);
+        float shimmer = min + (max - min) * (0.5f + 0.5f * MathF.Sin(time * 5f + e.Phase));
+        float hop = MathF.Abs(MathF.Sin(time * 6f + e.Phase)) * 0.08f;
+        if (e.BlinkTicks <= 0) return (shimmer, 0f, hop);
+        float t = 1f - e.BlinkTicks / (float)Math.Max(1, cfg.SnapBlinkTicks);   // 0 at the jump, 1 when it has landed
+        return (t, 1f - t, hop);
+    }
+
+    private static void JumperBody(Vector3 pos, float alpha, Color color, bool wires)
+    {
+        if (alpha <= 0.01f) return;
+        float a = Math.Clamp(alpha, 0f, 1f);
+        var c = new Color(color.R, color.G, color.B, (byte)(a * 255));
+        Raylib.DrawCube(pos, 0.8f, 0.7f, 0.8f, c);
+        // a brighter top face: an unlit cube would otherwise read as a flat hexagon
+        var top = new Color((byte)Math.Min(255, color.R + 50), (byte)Math.Min(255, color.G + 50),
+            (byte)Math.Min(255, color.B + 50), (byte)(a * 255));
+        Raylib.DrawCube(pos + new Vector3(0f, 0.36f, 0f), 0.80f, 0.02f, 0.80f, top);
+        if (wires) Raylib.DrawCubeWires(pos, 0.8f, 0.7f, 0.8f, new Color((byte)235, (byte)235, (byte)255, (byte)(c.A * 0.5f)));
+    }
+
     /// <summary>Pod room energy barriers: translucent amber slabs with bright edges (additive, unlit).</summary>
     private static void DrawPodBarriers(GameWorld world, GameConfig config)
     {
@@ -402,6 +450,14 @@ public sealed class SceneRenderer : IDisposable
         DrawEnemyShells(world, 0.85f);
         foreach (var e in world.Enemies)
             if (e.Kind == EnemyKind.RoboDroid) DrawRobotBeacon(e, (float)time);   // the lighthouse sweep blooms
+        foreach (var e in world.Enemies)
+        {
+            if (e.Kind != EnemyKind.SnapJumper) continue;   // the shimmering jumper glows softly
+            var (body, ghost, hop) = JumperFade(e, config, (float)time);
+            var paint = EnemyPalette.Of(e.ColorIndex);
+            JumperBody(P(e.BlinkFromX, e.BlinkFromY, 0.35f + hop), ghost * 0.55f, paint.Light, wires: false);
+            JumperBody(P(e.X, e.Y, 0.35f + hop), body * 0.55f, paint.Body, wires: false);
+        }
         _fx.DrawEmissive();
         if (world.IsPodRoom && !world.PodOpen)
             BarrierBoxes(world, config, new Color((byte)255, (byte)200, (byte)60, (byte)110),

@@ -359,18 +359,22 @@ public sealed class GameWorld
                         if (!movedX && !movedY) e.ModeLeft = 0;
                         break;
                     }
-                default: // snap jumper: pause, then dash in a (mostly player-ward) direction
+                default: // snap jumper: waits, then blinks a couple of cells (mostly player-ward)
                     {
-                        if (e.DashLeft > 0)
-                        {
-                            if (!Move(e, e.DashX, e.DashY)) e.DashLeft = 0; else e.DashLeft--;
-                        }
-                        else if (e.Timer % Config.SnapJumpInterval == 0)
+                        if (e.BlinkTicks > 0) e.BlinkTicks--;
+                        if (e.Timer % Config.SnapJumpInterval == 0)
                         {
                             Decide(e, dx, dy);
-                            float v = Config.SnapJumpSpeed * spd;   // fast, short hop
-                            e.DashX = e.JumpX * v; e.DashY = e.JumpY * v;
-                            e.DashLeft = Config.SnapJumpTicks;
+                            // a jump is a blink, not a slide: the body leaves one point and reappears at another,
+                            // which is what lets the renderer cross-fade the old spot into the new one
+                            float d = Config.SnapJumpDistance;
+                            float tx = e.X + e.JumpX * d, ty = e.Y + e.JumpY * d;
+                            if (tx > 1f && tx < RoomGrid.W - 1f && ty > 1f && ty < RoomGrid.H - 1f && OpenArea(tx, ty, 0.45f))
+                            {
+                                e.BlinkFromX = e.X; e.BlinkFromY = e.Y;
+                                e.BlinkTicks = Config.SnapBlinkTicks;
+                                e.X = tx; e.Y = ty;
+                            }
                         }
                         break;
                     }

@@ -36,9 +36,14 @@ public sealed class GameConfig
     public float CycleEnemySpeedBonus { get; init; } = 0.2f;
     public float EnemySpeedScale { get; init; } = 1f;
     public bool GodMode { get; init; }   // test aid: walls and enemies do not kill
-    public int SnapJumpInterval { get; init; } = 60;   // ticks between jumps
-    public float SnapJumpSpeed { get; init; } = 0.4f;  // cells per tick while jumping
-    public int SnapJumpTicks { get; init; } = 5;       // jump length in ticks (about 2 cells)
+    public int SnapJumpInterval { get; init; } = 60;   // ticks between teleports
+    /// <summary>How far a snap jumper blinks per teleport, in cells.</summary>
+    public float SnapJumpDistance { get; init; } = 2f;
+    /// <summary>Length of the teleport cross-fade: the old spot fades out while the body fades in.</summary>
+    public int SnapBlinkTicks { get; init; } = 12;
+    /// <summary>Opacity range a waiting jumper shimmers between (1 = solid, 0.75 = a quarter transparent).</summary>
+    public float SnapJumperAlphaMin { get; init; } = 0.75f;
+    public float SnapJumperAlphaMax { get; init; } = 1f;
     public int Seed { get; init; } = 1;
     public float EnemyRadius { get; init; } = 0.5f;
     /// <summary>How many body colours enemies are rolled from at spawn (the renderer wraps if it has fewer).</summary>
