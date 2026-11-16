@@ -14,7 +14,6 @@ public sealed class AudioManager : IDisposable
         [Sfx.EnemyDie] = 0.6f, [Sfx.PlayerDie] = 0.7f, [Sfx.GameOver] = 0.7f, [Sfx.RoomEnter] = 0.25f,
     };
     private readonly Dictionary<Sfx, int> _lastPlayed = new();
-    private long _frame;
 
     // background ambience: a never-repeating real-time stream
     private AudioStream _music;
