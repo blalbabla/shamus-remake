@@ -68,7 +68,10 @@ public sealed class SceneRenderer : IDisposable
                     _fx.MuzzleFlash(P(e.X, e.Y, RoomMetrics.BarrelY), new Vector3(fx, 0f, fy));
                     break;
                 case WorldEventKind.EnemyShot:
-                    _fx.EnemyMuzzle(P(e.X, e.Y, RoomMetrics.EnemyBulletY) + EnemyMuzzleOffset(world));
+                    // one flash per fresh bolt: a drone's fan lights its three slits, a droid lights its eye
+                    foreach (var b in world.EnemyBullets)
+                        if (b.Age == 1 && b.Owner is { } shooter)
+                            _fx.EnemyMuzzle(P(shooter.X, shooter.Y, EnemyShellY(b)) + Dir3(b) * 0.34f);
                     break;
                 case WorldEventKind.BulletHitWall:
                 case WorldEventKind.BulletHitBarrier:
@@ -100,7 +103,7 @@ public sealed class SceneRenderer : IDisposable
             foreach (var b in world.EnemyBullets)
             {
                 var dir = Dir3(b);
-                _fx.EnemyTrail(P(b.X, b.Y, RoomMetrics.EnemyBulletY) - dir * 0.1f, dir);
+                _fx.EnemyTrail(P(b.X, b.Y, EnemyShellY(b)) - dir * 0.1f, dir);
             }
         }
     }
@@ -118,14 +121,6 @@ public sealed class SceneRenderer : IDisposable
         float fx = faceX, fy = faceY;
         float len = MathF.Sqrt(fx * fx + fy * fy);
         return len < 0.5f ? (1f, 0f) : (fx / len, fy / len);
-    }
-
-    /// <summary>Direction of the freshest enemy shell, so a shooter's muzzle flash sits at its barrel and not in the body.</summary>
-    private static Vector3 EnemyMuzzleOffset(GameWorld world)
-    {
-        foreach (var b in world.EnemyBullets)
-            if (b.Age <= 1) return Dir3(b) * 0.4f;
-        return Vector3.Zero;
     }
 
     /// <summary>Unit flight direction of a shell (always horizontal).</summary>
@@ -214,17 +209,8 @@ public sealed class SceneRenderer : IDisposable
         {
             switch (e.Kind)
             {
-                case EnemyKind.RoboDroid:
-                    // body + head together reach RoomMetrics.EnemyHeight
-                    Raylib.DrawCube(P(e.X, e.Y, 0.39f), 0.9f, 0.78f, 0.9f, Color.Gray);
-                    Raylib.DrawCube(P(e.X, e.Y, 0.87f), 0.55f, 0.18f, 0.55f, Color.DarkBlue);
-                    Raylib.DrawCube(P(e.X, e.Y, 0.87f) + new Vector3(0, 0, 0.29f), 0.4f, 0.09f, 0.05f, Color.Red);
-                    break;
-                case EnemyKind.SpiralDrone:
-                    float hover = MathF.Sin((float)now * 2.2f + e.Phase) * 0.06f;
-                    Raylib.DrawSphere(P(e.X, e.Y, 0.48f + hover), 0.42f, Color.Magenta);
-                    Raylib.DrawCube(P(e.X, e.Y, 0.48f + hover), 1.2f, 0.09f, 0.09f, Color.Purple);
-                    break;
+                case EnemyKind.RoboDroid: DrawRoboDroid(e); break;
+                case EnemyKind.SpiralDrone: DrawSpiralDrone(e, world, (float)now); break;
                 default:
                     float hop = MathF.Abs(MathF.Sin((float)now * 6f + e.Phase)) * 0.25f;
                     Raylib.DrawCube(P(e.X, e.Y, 0.35f + hop), 0.8f, 0.7f, 0.8f, Color.Green);
@@ -234,6 +220,66 @@ public sealed class SceneRenderer : IDisposable
         if (world.ShadowActive) DrawShadow(P(world.ShadowX, world.ShadowY, 0f));
 
         return mysteryPos;
+    }
+
+    /// <summary>Methodical walker: a grey body with a dark head and a single red eye that fires straight ahead.</summary>
+    private static void DrawRoboDroid(Enemy e)
+    {
+        // body + head together reach RoomMetrics.EnemyHeight
+        Raylib.DrawCube(P(e.X, e.Y, 0.39f), 0.9f, 0.78f, 0.9f, Color.Gray);
+        Raylib.DrawCube(P(e.X, e.Y, RoomMetrics.RobotEyeY), 0.55f, 0.18f, 0.55f, Color.DarkBlue);
+        Raylib.DrawCube(P(e.X, e.Y, RoomMetrics.RobotEyeY) + new Vector3(0, 0, 0.29f), 0.4f, 0.09f, 0.05f, Color.Red);
+    }
+
+    /// <summary>
+    /// Spiral drone, built after the reference: a low wide saucer with conical spikes around the rim and a tapering
+    /// tower on top. The tower carries three vertical slits and the whole drone turns to face the player, so a shot
+    /// leaves the slits both visually and in the simulation (bolts fly from the same angles as the fan).
+    /// </summary>
+    private static void DrawSpiralDrone(Enemy e, GameWorld world, float time)
+    {
+        var saucer = new Color((byte)206, (byte)110, (byte)214, (byte)255);
+        var saucerTop = new Color((byte)232, (byte)150, (byte)240, (byte)255);
+        var tower = new Color((byte)176, (byte)76, (byte)190, (byte)255);
+        var spike = new Color((byte)236, (byte)214, (byte)240, (byte)255);
+        var slit = new Color((byte)24, (byte)8, (byte)28, (byte)255);
+
+        float hover = MathF.Sin(time * 2.2f + e.Phase) * 0.06f;
+        float dx = world.PlayerX - e.X, dy = world.PlayerY - e.Y;
+        float yaw = MathF.Atan2(dx, dy) * (180f / MathF.PI);   // local +Z points at the player
+
+        var c = P(e.X, e.Y, 0f);
+        Rlgl.PushMatrix();
+        Rlgl.Translatef(c.X, hover, c.Z);
+        Rlgl.Rotatef(yaw, 0, 1, 0);
+
+        // saucer body, with a slightly wider lighter disc capping it
+        Raylib.DrawCylinder(new Vector3(0, 0.30f, 0), 0.58f, 0.58f, 0.20f, 18, saucer);
+        Raylib.DrawCylinder(new Vector3(0, 0.50f, 0), 0.50f, 0.58f, 0.04f, 18, saucerTop);
+
+        // six spikes around the rim, angled slightly down as in the reference
+        for (int i = 0; i < 6; i++)
+        {
+            float a = i * MathF.PI / 3f + 0.26f;
+            var dir = new Vector3(MathF.Sin(a), 0f, MathF.Cos(a));
+            Raylib.DrawCylinderEx(dir * 0.54f + new Vector3(0f, 0.41f, 0f), dir * 0.88f + new Vector3(0f, 0.36f, 0f),
+                0.055f, 0.004f, 5, spike);
+        }
+
+        // tapering tower (truncated cone)
+        Raylib.DrawCylinderEx(new Vector3(0, 0.53f, 0), new Vector3(0, 0.86f, 0), 0.34f, 0.235f, 14, tower);
+
+        // three vertical slits on the face that looks at the player: the gun ports. Their angles match the +-0.35 rad
+        // spread of a drone's fan, so the bolts really do leave the slits.
+        foreach (float a in new[] { -0.35f, 0f, 0.35f })
+        {
+            Rlgl.PushMatrix();
+            Rlgl.Rotatef(a * 180f / MathF.PI, 0, 1, 0);
+            Raylib.DrawCube(new Vector3(0f, RoomMetrics.DroneSlitY, 0.288f), 0.055f, 0.20f, 0.05f, slit);
+            Rlgl.PopMatrix();
+        }
+
+        Rlgl.PopMatrix();
     }
 
     /// <summary>
@@ -262,7 +308,7 @@ public sealed class SceneRenderer : IDisposable
 
     /// <summary>
     /// Enemy shells: a small plasma orb, the same size as the player's shell but round and orange-hot with a pale core,
-    /// so the two are never confused. Drawn unlit at <see cref="RoomMetrics.EnemyBulletY"/>.
+    /// so the two are never confused. Drawn unlit at the height its shooter fires from.
     /// </summary>
     private static void DrawEnemyShells(GameWorld world, float intensity = 1f)
     {
@@ -270,11 +316,18 @@ public sealed class SceneRenderer : IDisposable
         var core = Dim(new Color((byte)255, (byte)226, (byte)150, (byte)255), intensity);
         foreach (var b in world.EnemyBullets)
         {
-            var p = P(b.X, b.Y, RoomMetrics.EnemyBulletY);
+            var p = P(b.X, b.Y, EnemyShellY(b));
             Raylib.DrawSphereEx(p, 0.085f, 6, 10, shell);
             Raylib.DrawSphereEx(p, 0.045f, 6, 8, core);
         }
     }
+
+    /// <summary>Height an enemy bolt flies at: the owner's gun port (drone slits, droid eye), not a fixed floor offset.</summary>
+    private static float EnemyShellY(Bullet b) => b.Owner?.Kind switch
+    {
+        EnemyKind.RoboDroid => RoomMetrics.RobotEyeY,
+        _ => RoomMetrics.DroneSlitY,
+    };
 
     /// <summary>Pod room energy barriers: translucent amber slabs with bright edges (additive, unlit).</summary>
     private static void DrawPodBarriers(GameWorld world, GameConfig config)

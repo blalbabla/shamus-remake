@@ -46,10 +46,13 @@ public static class RoomMetrics
     public const float PropHeight = EnemyHeight;
 
     /// <summary>
-    /// Height enemy shells fly at: roughly the middle of a robot and the centre of a hovering drone, so a shot reads
-    /// as coming out of the shooter rather than off the floor. Player shells use <see cref="BarrelY"/> instead.
+    /// Height of the three vertical slits in a spiral drone's tower. Their bolts leave from here, so a drone's shells
+    /// visibly come out of the gun ports instead of its middle.
     /// </summary>
-    public const float EnemyBulletY = 0.5f;
+    public const float DroneSlitY = 0.69f;
+
+    /// <summary>Height of a robo-droid's red eye; its bolts leave from here.</summary>
+    public const float RobotEyeY = 0.87f;
 
     /// <summary>The Shadow deliberately towers over the walls: it should feel like it does not belong to the room.</summary>
     public const float ShadowHeight = 1.45f;
