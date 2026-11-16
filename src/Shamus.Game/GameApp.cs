@@ -322,6 +322,7 @@ public sealed class GameApp
 
     private void Update(float dt)
     {
+        GameInput.Update();
         if (Raylib.IsKeyPressed(KeyboardKey.F2)) { _settings.Muted = !_settings.Muted; ApplyAudioSettings(); _settings.Save(); }
         _hud.Update(dt);
         _scene.Rig.Update(dt);
@@ -336,44 +337,42 @@ public sealed class GameApp
         {
             case AppState.Title:
                 _titleMenu.Update();
-                if (Raylib.IsKeyPressed(KeyboardKey.Escape)) _quit = true;
+                if (Raylib.IsKeyPressed(KeyboardKey.Escape)) _quit = true;   // B must not quit the game
                 break;
 
             case AppState.Settings:
                 _settingsMenu.Update();
-                if (Raylib.IsKeyPressed(KeyboardKey.Escape)) CloseSettings();
+                if (GameInput.BackPressed) CloseSettings();
                 break;
 
             case AppState.Map:
-                if (Raylib.IsKeyPressed(KeyboardKey.M) || Raylib.IsKeyPressed(KeyboardKey.Escape) || Raylib.IsKeyPressed(KeyboardKey.Tab)) _state = AppState.Playing;
+                if (GameInput.MapPressed || GameInput.BackPressed) _state = AppState.Playing;
                 break;
 
             case AppState.Paused:
                 _pauseMenu.Update();
-                if (Raylib.IsKeyPressed(KeyboardKey.Escape) || Raylib.IsKeyPressed(KeyboardKey.P)) _state = AppState.Playing;
+                if (GameInput.PausePressed) _state = AppState.Playing;
                 break;
 
             case AppState.GameOver:
-                if (Raylib.IsKeyPressed(KeyboardKey.Enter) || Raylib.IsKeyPressed(KeyboardKey.Space)) StartGame(_startRoom);
-                if (Raylib.IsKeyPressed(KeyboardKey.Escape)) ToTitle();
+                if (GameInput.ConfirmPressed) StartGame(_startRoom);
+                if (GameInput.BackPressed) ToTitle();
                 break;
 
             case AppState.Playing:
-                if (Raylib.IsKeyPressed(KeyboardKey.M) || Raylib.IsKeyPressed(KeyboardKey.Tab)) { _state = AppState.Map; break; }
-                if (Raylib.IsKeyPressed(KeyboardKey.Escape) || Raylib.IsKeyPressed(KeyboardKey.P)) { _pauseMenu.Reset(); _state = AppState.Paused; break; }
+                if (GameInput.MapPressed) { _state = AppState.Map; break; }
+                if (GameInput.PausePressed) { _pauseMenu.Reset(); _state = AppState.Paused; break; }
                 if (Raylib.IsKeyPressed(KeyboardKey.F5)) { _config = BuildConfig(); _world = new GameWorld(_maze, _config, _world.Room); }
                 if (_debug && Raylib.IsKeyPressed(KeyboardKey.RightBracket)) _world = new GameWorld(_maze, _config, _world.Room + 1);
                 if (_debug && Raylib.IsKeyPressed(KeyboardKey.LeftBracket)) _world = new GameWorld(_maze, _config, _world.Room - 1);
 
-                // WASD, arrows and the numpad (8/4/2/6 plus 7/9/1/3 diagonals; Home/PgUp/End/PgDn when NumLock is off)
-                static bool Down(params KeyboardKey[] k) { foreach (var x in k) if (Raylib.IsKeyDown(x)) return true; return false; }
-                bool left = Down(KeyboardKey.A, KeyboardKey.Left, KeyboardKey.Kp4, KeyboardKey.Kp7, KeyboardKey.Kp1, KeyboardKey.Home, KeyboardKey.End);
-                bool right = Down(KeyboardKey.D, KeyboardKey.Right, KeyboardKey.Kp6, KeyboardKey.Kp9, KeyboardKey.Kp3, KeyboardKey.PageUp, KeyboardKey.PageDown);
-                bool up = Down(KeyboardKey.W, KeyboardKey.Up, KeyboardKey.Kp8, KeyboardKey.Kp7, KeyboardKey.Kp9, KeyboardKey.Home, KeyboardKey.PageUp);
-                bool dn = Down(KeyboardKey.S, KeyboardKey.Down, KeyboardKey.Kp2, KeyboardKey.Kp1, KeyboardKey.Kp3, KeyboardKey.End, KeyboardKey.PageDown);
-                int mx = (right ? 1 : 0) - (left ? 1 : 0), my = (dn ? 1 : 0) - (up ? 1 : 0);
-                bool fire = Down(KeyboardKey.Space, KeyboardKey.LeftControl, KeyboardKey.RightControl, KeyboardKey.Kp0, KeyboardKey.Kp5)
-                    || _args.Contains("--fire");   // debug: hold the trigger, so --shot can capture shells and effects
+                // The keyboard drives the room axes directly, exactly as before the gamepad support. The stick is
+                // screen-relative: its direction is mapped through the camera, so "right" on screen is right in
+                // both views. The two sources are summed if both are used at once.
+                var (padX, padY) = _scene.Rig.ScreenToRoom(GameInput.PadX, GameInput.PadY);
+                int mx = Math.Clamp(GameInput.KeyboardX + padX, -1, 1);
+                int my = Math.Clamp(GameInput.KeyboardY + padY, -1, 1);
+                bool fire = GameInput.FireHeld || _args.Contains("--fire");   // debug: hold the trigger
 
                 _acc = MathF.Min(_acc + dt, 0.1f);
                 while (_acc >= Step)

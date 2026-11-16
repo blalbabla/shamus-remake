@@ -21,12 +21,12 @@ public sealed class Menu
     public void Update()
     {
         if (Items.Count == 0) return;
-        if (Raylib.IsKeyPressed(KeyboardKey.Down) || Raylib.IsKeyPressed(KeyboardKey.S)) { Selected = (Selected + 1) % Items.Count; OnMove?.Invoke(); }
-        if (Raylib.IsKeyPressed(KeyboardKey.Up) || Raylib.IsKeyPressed(KeyboardKey.W)) { Selected = (Selected + Items.Count - 1) % Items.Count; OnMove?.Invoke(); }
+        if (GameInput.DownPressed) { Selected = (Selected + 1) % Items.Count; OnMove?.Invoke(); }
+        if (GameInput.UpPressed) { Selected = (Selected + Items.Count - 1) % Items.Count; OnMove?.Invoke(); }
         var it = Items[Selected];
-        if (Raylib.IsKeyPressed(KeyboardKey.Left) || Raylib.IsKeyPressed(KeyboardKey.A)) { it.OnChange?.Invoke(-1); OnMove?.Invoke(); }
-        if (Raylib.IsKeyPressed(KeyboardKey.Right) || Raylib.IsKeyPressed(KeyboardKey.D)) { it.OnChange?.Invoke(1); OnMove?.Invoke(); }
-        if (Raylib.IsKeyPressed(KeyboardKey.Enter) || Raylib.IsKeyPressed(KeyboardKey.KpEnter) || (it.OnChange == null && Raylib.IsKeyPressed(KeyboardKey.Space))) it.OnEnter?.Invoke();
+        if (GameInput.LeftPressed) { it.OnChange?.Invoke(-1); OnMove?.Invoke(); }
+        if (GameInput.RightPressed) { it.OnChange?.Invoke(1); OnMove?.Invoke(); }
+        if (GameInput.ConfirmPressed) it.OnEnter?.Invoke();
     }
 
     public void Draw(int top, int screenW, int size = 32, int step = 52)

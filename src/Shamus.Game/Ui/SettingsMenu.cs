@@ -42,12 +42,12 @@ public sealed class SettingsMenu
     {
         if (Rows.Count == 0) return;
         if (!IsSelectable(Selected)) Reset();
-        if (Raylib.IsKeyPressed(KeyboardKey.Down) || Raylib.IsKeyPressed(KeyboardKey.S)) { Selected = NextSelectable(Selected, 1); OnMove?.Invoke(); }
-        if (Raylib.IsKeyPressed(KeyboardKey.Up) || Raylib.IsKeyPressed(KeyboardKey.W)) { Selected = NextSelectable(Selected, -1); OnMove?.Invoke(); }
+        if (GameInput.DownPressed) { Selected = NextSelectable(Selected, 1); OnMove?.Invoke(); }
+        if (GameInput.UpPressed) { Selected = NextSelectable(Selected, -1); OnMove?.Invoke(); }
         var row = Rows[Selected];
-        if (Raylib.IsKeyPressed(KeyboardKey.Left) || Raylib.IsKeyPressed(KeyboardKey.A)) row.Change?.Invoke(-1);
-        if (Raylib.IsKeyPressed(KeyboardKey.Right) || Raylib.IsKeyPressed(KeyboardKey.D)) row.Change?.Invoke(1);
-        if (Raylib.IsKeyPressed(KeyboardKey.Enter) || Raylib.IsKeyPressed(KeyboardKey.KpEnter) || Raylib.IsKeyPressed(KeyboardKey.Space)) row.Activate?.Invoke();
+        if (GameInput.LeftPressed) row.Change?.Invoke(-1);
+        if (GameInput.RightPressed) row.Change?.Invoke(1);
+        if (GameInput.ConfirmPressed) row.Activate?.Invoke();
     }
 
     public void Draw(int top, int screenW, int size = 28, int step = 40, int headerSize = 22)
