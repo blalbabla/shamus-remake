@@ -51,8 +51,8 @@ public static class RoomMetrics
     /// </summary>
     public const float DroneSlitY = 0.69f;
 
-    /// <summary>Height of a robo-droid's red eye; its bolts leave from here.</summary>
-    public const float RobotEyeY = 0.87f;
+    /// <summary>Height of the black muzzle slot in a robo-droid's gun housing; its bolts leave from here.</summary>
+    public const float RobotMuzzleY = 0.60f;
 
     /// <summary>The Shadow deliberately towers over the walls: it should feel like it does not belong to the room.</summary>
     public const float ShadowHeight = 1.45f;

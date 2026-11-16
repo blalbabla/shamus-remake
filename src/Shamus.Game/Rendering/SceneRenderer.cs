@@ -209,7 +209,7 @@ public sealed class SceneRenderer : IDisposable
         {
             switch (e.Kind)
             {
-                case EnemyKind.RoboDroid: DrawRoboDroid(e); break;
+                case EnemyKind.RoboDroid: DrawRoboDroid(e, world, (float)now); break;
                 case EnemyKind.SpiralDrone: DrawSpiralDrone(e, world, (float)now); break;
                 default:
                     float hop = MathF.Abs(MathF.Sin((float)now * 6f + e.Phase)) * 0.25f;
@@ -222,14 +222,78 @@ public sealed class SceneRenderer : IDisposable
         return mysteryPos;
     }
 
-    /// <summary>Methodical walker: a boxy body with a dark head and a single red eye that fires straight ahead.</summary>
-    private static void DrawRoboDroid(Enemy e)
+    /// <summary>
+    /// Robo-droid, built after the reference: a tracked platform with an overhanging deck, four armour blocks on the
+    /// corners, a raised gun housing with a black muzzle slot, and a drum tower ringed by two dark bands with a red
+    /// beacon running around it.
+    /// </summary>
+    private static void DrawRoboDroid(Enemy e, GameWorld world, float time)
     {
         var p = EnemyPalette.Of(e.ColorIndex);
-        // body + head together reach RoomMetrics.EnemyHeight
-        Raylib.DrawCube(P(e.X, e.Y, 0.39f), 0.9f, 0.78f, 0.9f, p.Body);
-        Raylib.DrawCube(P(e.X, e.Y, RoomMetrics.RobotEyeY), 0.55f, 0.18f, 0.55f, p.Dark);
-        Raylib.DrawCube(P(e.X, e.Y, RoomMetrics.RobotEyeY) + new Vector3(0, 0, 0.29f), 0.4f, 0.09f, 0.05f, Color.Red);
+        var track = new Color((byte)96, (byte)98, (byte)104, (byte)255);
+        var trackTop = new Color((byte)132, (byte)134, (byte)140, (byte)255);
+        var band = new Color((byte)62, (byte)62, (byte)68, (byte)255);
+        var muzzle = new Color((byte)18, (byte)18, (byte)22, (byte)255);
+
+        var c = P(e.X, e.Y, 0f);
+        Rlgl.PushMatrix();
+        Rlgl.Translatef(c.X, 0f, c.Z);
+        Rlgl.Rotatef(RobotYaw(e, world), 0, 1, 0);
+
+        // running gear: two tracks with a lighter top plate, always neutral grey, whatever the body paint
+        foreach (float sx in new[] { -0.40f, 0.40f })
+        {
+            Raylib.DrawCube(new Vector3(sx, 0.14f, 0f), 0.20f, 0.24f, 1.02f, track);
+            Raylib.DrawCube(new Vector3(sx, 0.27f, 0f), 0.17f, 0.04f, 0.94f, trackTop);
+        }
+
+        // hull, then the deck that overhangs the tracks
+        Raylib.DrawCube(new Vector3(0f, 0.34f, 0f), 0.72f, 0.20f, 0.94f, p.Body);
+        Raylib.DrawCube(new Vector3(0f, 0.46f, 0f), 0.92f, 0.05f, 1.00f, p.Light);
+
+        // four armour blocks: a tall and a low one at the front-left and the rear-right corner
+        Raylib.DrawCube(new Vector3(-0.34f, 0.66f, 0.26f), 0.22f, 0.34f, 0.26f, p.Body);
+        Raylib.DrawCube(new Vector3(-0.34f, 0.59f, 0.00f), 0.22f, 0.20f, 0.24f, p.Body);
+        Raylib.DrawCube(new Vector3(0.34f, 0.66f, -0.26f), 0.22f, 0.34f, 0.26f, p.Body);
+        Raylib.DrawCube(new Vector3(0.34f, 0.59f, 0.00f), 0.22f, 0.20f, 0.24f, p.Body);
+
+        // gun housing in front of the tower, with the black muzzle slot the bolts leave from
+        Raylib.DrawCube(new Vector3(0f, 0.60f, 0.24f), 0.40f, 0.24f, 0.24f, p.Body);
+        Raylib.DrawCube(new Vector3(0f, 0.60f, 0.37f), 0.26f, 0.07f, 0.05f, muzzle);
+
+        // drum tower with two dark bands; the beacon runs between them
+        Raylib.DrawCylinder(new Vector3(0f, 0.62f, 0f), 0.22f, 0.22f, 0.28f, 12, p.Body);
+        Raylib.DrawCylinder(new Vector3(0f, 0.895f, 0f), 0.235f, 0.225f, 0.035f, 12, p.Light);
+        Raylib.DrawCylinder(new Vector3(0f, 0.695f, 0f), 0.232f, 0.232f, 0.032f, 12, band);
+        Raylib.DrawCylinder(new Vector3(0f, 0.793f, 0f), 0.232f, 0.232f, 0.032f, 12, band);
+
+        Rlgl.PopMatrix();
+        DrawRobotBeacon(e, world, time);
+    }
+
+    /// <summary>
+    /// Heading of a droid, snapped to the axis it would shoot along: the muzzle then always faces the player, and a
+    /// tracked vehicle never appears to drive sideways towards its own turret.
+    /// </summary>
+    private static float RobotYaw(Enemy e, GameWorld world)
+    {
+        float dx = world.PlayerX - e.X, dy = world.PlayerY - e.Y;
+        return MathF.Abs(dx) >= MathF.Abs(dy) ? (dx >= 0f ? 90f : -90f) : (dy >= 0f ? 0f : 180f);
+    }
+
+    /// <summary>Red beacon light sweeping around the droid's tower bands, like a lighthouse. Also fed to the glow pass.</summary>
+    private static void DrawRobotBeacon(Enemy e, GameWorld world, float time)
+    {
+        var beacon = new Color((byte)255, (byte)55, (byte)40, (byte)255);
+        var c = P(e.X, e.Y, 0f);
+        Rlgl.PushMatrix();
+        Rlgl.Translatef(c.X, 0f, c.Z);
+        Rlgl.Rotatef(RobotYaw(e, world), 0, 1, 0);
+        Rlgl.PushMatrix();
+        Rlgl.Rotatef(time * 2.4f * (180f / MathF.PI) % 360f, 0, 1, 0);
+        Raylib.DrawCube(new Vector3(0f, 0.744f, 0.228f), 0.13f, 0.075f, 0.05f, beacon);
+        Rlgl.PopMatrix();
+        Rlgl.PopMatrix();
     }
 
     /// <summary>
@@ -320,10 +384,10 @@ public sealed class SceneRenderer : IDisposable
         }
     }
 
-    /// <summary>Height an enemy bolt flies at: the owner's gun port (drone slits, droid eye), not a fixed floor offset.</summary>
+    /// <summary>Height an enemy bolt flies at: the owner's gun port (drone slits, droid muzzle), not a fixed floor offset.</summary>
     private static float EnemyShellY(Bullet b) => b.Owner?.Kind switch
     {
-        EnemyKind.RoboDroid => RoomMetrics.RobotEyeY,
+        EnemyKind.RoboDroid => RoomMetrics.RobotMuzzleY,
         _ => RoomMetrics.DroneSlitY,
     };
 
@@ -349,6 +413,8 @@ public sealed class SceneRenderer : IDisposable
         _room.DrawEmissive(world.Grid, level, time, doorColor, world.DoorClosed ? world.DoorSide : 0);
         DrawShells(world, 0.7f);
         DrawEnemyShells(world, 0.85f);
+        foreach (var e in world.Enemies)
+            if (e.Kind == EnemyKind.RoboDroid) DrawRobotBeacon(e, world, (float)time);   // the lighthouse sweep blooms
         _fx.DrawEmissive();
         if (world.IsPodRoom && !world.PodOpen)
             BarrierBoxes(world, config, new Color((byte)255, (byte)200, (byte)60, (byte)110),
