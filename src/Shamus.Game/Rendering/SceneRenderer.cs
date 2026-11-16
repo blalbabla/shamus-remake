@@ -152,7 +152,7 @@ public sealed class SceneRenderer : IDisposable
         _glow.EndEmitters();
     }
 
-    /// <summary>Renders the lit world, then unlit translucent overlays and the 2D "?" label.</summary>
+    /// <summary>Renders the lit world, then unlit translucent overlays and the bloom pass.</summary>
     public void Draw(GameWorld world, GameConfig config, float alpha)
     {
         var maze = world.Maze;
@@ -161,7 +161,7 @@ public sealed class SceneRenderer : IDisposable
 
         Rig.BeginView();
         _light.Begin();
-        Vector3? mysteryPos = DrawWorld(world, alpha, shadowPass: false);
+        DrawWorld(world, alpha, shadowPass: false);
         // The jumpers stay inside the lit pass so their facets get real shading, but they never write depth:
         // a translucent gem that did would punch a hole into the floor behind it.
         DrawJumpers(world, (float)Raylib.GetTime());
@@ -178,26 +178,19 @@ public sealed class SceneRenderer : IDisposable
 
         // Bloom is a 2D additive pass, so it needs the 1280x720 UI projection back.
         _glow.Composite();
-
-        if (mysteryPos is Vector3 mp)
-        {
-            var sp = Raylib.GetWorldToScreenEx(mp, Rig.Camera, VirtualWidth, VirtualHeight);
-            Raylib.DrawText("?", (int)sp.X - 8, (int)sp.Y - 14, 32, Color.White);
-        }
     }
 
     /// <summary>Opaque, shadow-casting world contents. The shadow pass skips the floor so only casters write depth.</summary>
-    private Vector3? DrawWorld(GameWorld world, float alpha, bool shadowPass)
+    private void DrawWorld(GameWorld world, float alpha, bool shadowPass)
     {
         var maze = world.Maze;
         int level = maze.Level(world.Room);
         double time = Raylib.GetTime();
-        Vector3? mysteryPos = null;
 
         if (shadowPass) _room.DrawPosts(world.Grid, level, time);
         else _room.DrawSolid(world.Grid, level, time);
 
-        if (world.Obj != null) mysteryPos = DrawObject(world.Obj);
+        if (world.Obj != null) DrawItem(world.Obj, time);
 
         float px = world.PrevPlayerX + (world.PlayerX - world.PrevPlayerX) * alpha;
         float py = world.PrevPlayerY + (world.PlayerY - world.PrevPlayerY) * alpha;
@@ -221,8 +214,6 @@ public sealed class SceneRenderer : IDisposable
             }
         }
         if (world.ShadowActive) DrawShadow(P(world.ShadowX, world.ShadowY, 0f));
-
-        return mysteryPos;
     }
 
     /// <summary>
@@ -495,7 +486,7 @@ public sealed class SceneRenderer : IDisposable
                 new Color((byte)255, (byte)240, (byte)160, (byte)255), wires: false);
 
         if (world.Obj is { Kind: ObjectKind.Mystery } o)
-            Raylib.DrawCube(P(o.X, o.Y, 0.45f), 0.85f, 0.85f, 0.85f, new Color((byte)190, (byte)120, (byte)255, (byte)255));
+            DrawItem(o, time, emissive: true);
         if (world.ShadowActive)
         {
             float bodyH = RoomMetrics.ShadowHeight - 0.4f;
@@ -583,38 +574,112 @@ public sealed class SceneRenderer : IDisposable
         Raylib.DrawCube(feet + new Vector3(0.15f, bodyH + 0.28f, 0.40f), 0.16f, 0.09f, 0.08f, Color.Red);
     }
 
-    private static Vector3? DrawObject(RoomObject o)
+    /// <summary>
+    /// Room pickups. All of them float above the floor. The key lies flat and spins in both views; the keyhole
+    /// lies flat and still; the potion plus and the mystery question mark stand upright and spin in the isometric
+    /// view, but lie flat and still in the top view. The change follows the animated camera tilt.
+    /// </summary>
+    private void DrawItem(RoomObject o, double time, bool emissive = false)
     {
-        Vector3? mystery = null;
+        float t = (float)time;
+        float blend = Rig.IsometricBlend;
+        float bob = MathF.Sin(t * 2.2f) * 0.035f;
         var oc = AtariPalette.ToColor(o.Hue, o.Luma);
-        float bob = MathF.Sin((float)Raylib.GetTime() * 3f) * 0.1f;
+        float upright = RoomMetrics.PropHover + (RoomMetrics.StandingPropHover - RoomMetrics.PropHover) * blend + bob;
+
         switch (o.Kind)
         {
             case ObjectKind.Key:
-                var kp = P(o.X, o.Y, 0.5f + bob);
-                Raylib.DrawSphere(kp + new Vector3(-0.45f, 0, 0), 0.32f, oc);
-                Raylib.DrawCube(kp + new Vector3(0.1f, 0, 0), 1.0f, 0.16f, 0.16f, oc);
-                Raylib.DrawCube(kp + new Vector3(0.45f, 0, 0.18f), 0.14f, 0.16f, 0.36f, oc);
+                ItemTransformFlat(o, RoomMetrics.PropHover + bob, t * 30f);
+                KeyModel(oc);
+                Rlgl.PopMatrix();
                 break;
             case ObjectKind.Keyhole:
-                var hp = P(o.X, o.Y, 0f);
-                Raylib.DrawCube(hp + new Vector3(0, 0.4f, 0), 1.0f, 0.8f, 1.0f, oc);
-                Raylib.DrawCube(hp + new Vector3(0, 0.83f, 0), 0.25f, 0.05f, 0.6f, Color.Black);
+                ItemTransformFlat(o, RoomMetrics.KeyholeHover + bob * 0.3f, 0f);
+                KeyholeModel(oc);
+                Rlgl.PopMatrix();
                 break;
             case ObjectKind.Potion:
-                var pp = P(o.X, o.Y, 0.4f + bob);
-                Raylib.DrawSphere(pp, 0.4f, new Color(120, 230, 150, 255));
-                Raylib.DrawCylinder(pp + new Vector3(0, 0.3f, 0), 0.12f, 0.12f, 0.2f, 8, Color.LightGray);
+                ItemTransformUpright(o, upright, t * 30f * blend, -90f * (1f - blend));
+                PlusModel(new Color((byte)120, (byte)230, (byte)150, (byte)255));
+                Rlgl.PopMatrix();
+                break;
+            case ObjectKind.Mystery:
+                ItemTransformUpright(o, upright, t * 30f * blend, -90f * (1f - blend));
+                QuestionModel(emissive ? new Color((byte)235, (byte)190, (byte)255, (byte)255)
+                                       : new Color((byte)170, (byte)100, (byte)240, (byte)255));
+                Rlgl.PopMatrix();
                 break;
             case ObjectKind.Shadow:
                 DrawShadow(P(o.X, o.Y, 0f));
                 break;
-            case ObjectKind.Mystery:
-                var mp = P(o.X, o.Y, 0.45f + bob);
-                Raylib.DrawCube(mp, 0.8f, 0.8f, 0.8f, new Color(150, 80, 220, 255));
-                mystery = mp + new Vector3(0, 0.5f, 0);
-                break;
         }
-        return mystery;
+    }
+
+    /// <summary>Flat pickup matrix: hover, then spin around the vertical (the key turns like it lies on a table).</summary>
+    private void ItemTransformFlat(RoomObject o, float hover, float spinDeg)
+    {
+        var pos = P(o.X, o.Y, hover);
+        Rlgl.PushMatrix();
+        Rlgl.Translatef(pos.X, pos.Y, pos.Z);
+        Rlgl.Rotatef(spinDeg, 0f, 1f, 0f);
+    }
+
+    /// <summary>
+    /// Standing pickup matrix: hover, spin around the vertical, then lay it down with the camera tilt (top view).
+    /// In the isometric view the plus and the question mark therefore turn like a sign on a pole.
+    /// </summary>
+    private void ItemTransformUpright(RoomObject o, float hover, float spinDeg, float tiltDeg)
+    {
+        var pos = P(o.X, o.Y, hover);
+        Rlgl.PushMatrix();
+        Rlgl.Translatef(pos.X, pos.Y, pos.Z);
+        Rlgl.Rotatef(spinDeg, 0f, 1f, 0f);
+        Rlgl.Rotatef(tiltDeg, 1f, 0f, 0f);
+    }
+
+    /// <summary>A key lying flat: ring bow, shaft and two teeth in the floor plane; +X is the tip.</summary>
+    private static void KeyModel(Color c)
+    {
+        for (int i = 0; i < 12; i++)
+        {
+            float a = i * MathF.Tau / 12f;
+            Raylib.DrawSphere(new Vector3(-0.62f + MathF.Cos(a) * 0.30f, 0f, MathF.Sin(a) * 0.30f), 0.095f, c);
+        }
+        Raylib.DrawCube(new Vector3(0.02f, 0f, 0f), 0.95f, 0.12f, 0.12f, c);
+        Raylib.DrawCube(new Vector3(0.36f, 0f, 0.19f), 0.16f, 0.12f, 0.34f, c);
+        Raylib.DrawCube(new Vector3(0.10f, 0f, 0.15f), 0.12f, 0.12f, 0.26f, c);
+    }
+
+    /// <summary>A keyhole plaque lying flat: a coloured disc with a dark hole and slot on top.</summary>
+    private static void KeyholeModel(Color c)
+    {
+        var hole = new Color((byte)10, (byte)10, (byte)14, (byte)255);
+        Raylib.DrawCylinder(new Vector3(0f, 0f, 0f), 0.60f, 0.60f, 0.10f, 20, c);
+        Raylib.DrawCylinder(new Vector3(0f, 0.101f, 0.02f), 0.15f, 0.15f, 0.02f, 12, hole);
+        Raylib.DrawCube(new Vector3(0f, 0.111f, 0.32f), 0.15f, 0.02f, 0.44f, hole);
+    }
+
+    /// <summary>A big plus in the local XY plane (stands upright before the camera-tilt lay-down).</summary>
+    private static void PlusModel(Color c)
+    {
+        Raylib.DrawCube(new Vector3(0f, 0f, 0f), 0.48f, 1.50f, 0.20f, c);
+        Raylib.DrawCube(new Vector3(0f, 0f, 0f), 1.50f, 0.48f, 0.20f, c);
+    }
+
+    /// <summary>A question mark in the local XY plane: hook, stem and dot, built from small spheres.</summary>
+    private static void QuestionModel(Color c)
+    {
+        var center = new Vector3(0f, 0.23f, 0f);
+        const float R = 0.27f;
+        for (int i = 0; i <= 12; i++)
+        {
+            float a = MathF.PI / 180f * (200f - 220f * i / 12f);
+            Raylib.DrawSphere(center + new Vector3(MathF.Cos(a) * R, MathF.Sin(a) * R, 0f), 0.085f, c);
+        }
+        Raylib.DrawSphere(new Vector3(0.19f, 0.0f, 0f), 0.082f, c);
+        Raylib.DrawSphere(new Vector3(0.13f, -0.14f, 0f), 0.082f, c);
+        Raylib.DrawSphere(new Vector3(0.07f, -0.27f, 0f), 0.082f, c);
+        Raylib.DrawSphere(new Vector3(0f, -0.50f, 0f), 0.10f, c);
     }
 }

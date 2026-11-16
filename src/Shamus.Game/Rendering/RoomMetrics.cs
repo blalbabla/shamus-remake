@@ -42,8 +42,14 @@ public static class RoomMetrics
     /// <summary>Tallest enemy, dome/head included.</summary>
     public const float EnemyHeight = 0.96f;
 
-    /// <summary>Pickups hover / stand at most this high.</summary>
-    public const float PropHeight = EnemyHeight;
+    /// <summary>Hover height of a flat pickup (the key); pickups float, they do not lie on the floor.</summary>
+    public const float PropHover = 0.45f;
+
+    /// <summary>The keyhole plate floats lower than the key: it belongs to the room rather than to the loot.</summary>
+    public const float KeyholeHover = 0.24f;
+
+    /// <summary>Centre height of a standing pickup (the plus and the question mark) in the isometric view.</summary>
+    public const float StandingPropHover = 0.95f;
 
     /// <summary>
     /// Height of the three vertical slits in a spiral drone's tower. Their bolts leave from here, so a drone's shells
