@@ -81,6 +81,7 @@ src/Shamus.Game/                 Raylib-фронтенд
   Rendering/GlowMap.cs           эмиссия в 1/4-кадр, 2 блюра, аддитивная композиция
   Rendering/ParticleFx.cs        косметика: вспышка у дула, шлейф снаряда, взрыв при попадании
   Rendering/RoomMetrics.cs       единый масштаб высот (стена = 0.5 клетки, ниже персонажей)
+  Rendering/EnemyPalette.cs      четыре окраса врагов (без зелёного) по Enemy.ColorIndex
   Rendering/AtariPalette.cs      палитра Atari
   Ui/                            Hud, Menu, SettingsMenu, Settings, MapView
   Audio/                         Dsp, ProceduralSfx, AmbientSynth, AudioManager
@@ -206,6 +207,10 @@ artifacts/                       исходники (ATR, PDF, скриншот�
   из щелей. Высоты выстрелов теперь по стрелку (`RoomMetrics.DroneSlitY` = 0.69, `RobotEyeY` = 0.87, выбор в
   `EnemyShellY` по `Bullet.Owner.Kind`), а вспышка на `EnemyShot` спавнится на каждый свежий болт — у дрона
   мигают все три порта, у робота глаз.
+- Окрас врагов случайный, как в оригинале: `Rendering/EnemyPalette` с четырьмя схемами (магента, янтарный,
+  голубой, багровый; каждая даёт Body/Light/Dark), зелёного нет — это танк. Слот выбирает симуляция при
+  появлении (`Enemy.ColorIndex = _rng.Next(Config.EnemyColorCount)`, `EnemyColorCount` = 4 в `config.json`),
+  поэтому окрас детерминирован; рендер только читает индекс. Новый тест `EnemyColoursAreRolledAndDeterministic`.
 - `assets/config.json` добавлен в `<Content>` и копируется в выходной каталог и в publish; dev-запуск
   по-прежнему читает исходное дерево (проверено правкой `StartLives` без пересборки).
 - Убран неиспользуемый `AudioManager._frame` (единственный warning сборки — теперь 0 warnings).
