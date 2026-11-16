@@ -3,3 +3,5 @@ obj/
 .vs/
 .claude/
 artifacts/
+# local publish output used to run the game by hand
+ShamusRemake/
