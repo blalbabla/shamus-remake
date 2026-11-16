@@ -46,10 +46,10 @@ public static class RoomMetrics
     public const float PropHeight = EnemyHeight;
 
     /// <summary>
-    /// Bullets fly inside the wall band, not above it: a shot stopped by a wall has to be drawn hitting the panel,
-    /// and now that the walls are 0.5 high a bullet at the old 0.86 would look like it flies over them.
+    /// Height enemy shells fly at: roughly the middle of a robot and the centre of a hovering drone, so a shot reads
+    /// as coming out of the shooter rather than off the floor. Player shells use <see cref="BarrelY"/> instead.
     /// </summary>
-    public const float BulletY = 0.35f;
+    public const float EnemyBulletY = 0.5f;
 
     /// <summary>The Shadow deliberately towers over the walls: it should feel like it does not belong to the room.</summary>
     public const float ShadowHeight = 1.45f;

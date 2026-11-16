@@ -219,7 +219,10 @@ public sealed class GameApp
         _state = AppState.Playing;
     }
 
-    private void SubmitScore() { if (_world != null && _state != AppState.Title && !_config.GodMode) _newHigh |= _settings.Submit(_settings.Maze, _world.Score); }
+    /// <summary>Debug runs (screenshot or forced fire) must not pollute the player's record table.</summary>
+    private bool DebugRun => _args.Contains("--shot") || _args.Contains("--fire");
+
+    private void SubmitScore() { if (_world != null && _state != AppState.Title && !_config.GodMode && !DebugRun) _newHigh |= _settings.Submit(_settings.Maze, _world.Score); }
 
     private void ToTitle() { SubmitScore(); _state = AppState.Title; _titleMenu.Reset(); LoadDemo(); }
 

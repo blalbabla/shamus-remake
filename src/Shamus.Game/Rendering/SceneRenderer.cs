@@ -67,6 +67,9 @@ public sealed class SceneRenderer : IDisposable
                     var (fx, fy) = Facing(world.FaceX, world.FaceY);
                     _fx.MuzzleFlash(P(e.X, e.Y, RoomMetrics.BarrelY), new Vector3(fx, 0f, fy));
                     break;
+                case WorldEventKind.EnemyShot:
+                    _fx.EnemyMuzzle(P(e.X, e.Y, RoomMetrics.EnemyBulletY) + EnemyMuzzleOffset(world));
+                    break;
                 case WorldEventKind.BulletHitWall:
                 case WorldEventKind.BulletHitBarrier:
                 case WorldEventKind.BulletsCancelled:
@@ -94,6 +97,11 @@ public sealed class SceneRenderer : IDisposable
                 var dir = Dir3(b);
                 _fx.Trail(P(b.X, b.Y, RoomMetrics.BarrelY) - dir * 0.12f, dir);
             }
+            foreach (var b in world.EnemyBullets)
+            {
+                var dir = Dir3(b);
+                _fx.EnemyTrail(P(b.X, b.Y, RoomMetrics.EnemyBulletY) - dir * 0.1f, dir);
+            }
         }
     }
 
@@ -110,6 +118,14 @@ public sealed class SceneRenderer : IDisposable
         float fx = faceX, fy = faceY;
         float len = MathF.Sqrt(fx * fx + fy * fy);
         return len < 0.5f ? (1f, 0f) : (fx / len, fy / len);
+    }
+
+    /// <summary>Direction of the freshest enemy shell, so a shooter's muzzle flash sits at its barrel and not in the body.</summary>
+    private static Vector3 EnemyMuzzleOffset(GameWorld world)
+    {
+        foreach (var b in world.EnemyBullets)
+            if (b.Age <= 1) return Dir3(b) * 0.4f;
+        return Vector3.Zero;
     }
 
     /// <summary>Unit flight direction of a shell (always horizontal).</summary>
@@ -155,6 +171,7 @@ public sealed class SceneRenderer : IDisposable
 
         // Unlit: shells, effects, floor title, pod barriers and the translucent force-field walls.
         DrawShells(world);
+        DrawEnemyShells(world);
         _fx.Draw();
         _room.DrawTitle(world.Room);
         if (world.IsPodRoom && !world.PodOpen) DrawPodBarriers(world, config);
@@ -215,7 +232,6 @@ public sealed class SceneRenderer : IDisposable
             }
         }
         if (world.ShadowActive) DrawShadow(P(world.ShadowX, world.ShadowY, 0f));
-        foreach (var b in world.EnemyBullets) Raylib.DrawSphere(P(b.X, b.Y, RoomMetrics.BulletY), 0.2f, Color.Orange);
 
         return mysteryPos;
     }
@@ -244,6 +260,22 @@ public sealed class SceneRenderer : IDisposable
     private static Color Dim(Color c, float f) =>
         new((byte)(c.R * f), (byte)(c.G * f), (byte)(c.B * f), c.A);
 
+    /// <summary>
+    /// Enemy shells: a small plasma orb, the same size as the player's shell but round and orange-hot with a pale core,
+    /// so the two are never confused. Drawn unlit at <see cref="RoomMetrics.EnemyBulletY"/>.
+    /// </summary>
+    private static void DrawEnemyShells(GameWorld world, float intensity = 1f)
+    {
+        var shell = Dim(new Color((byte)255, (byte)120, (byte)40, (byte)255), intensity);
+        var core = Dim(new Color((byte)255, (byte)226, (byte)150, (byte)255), intensity);
+        foreach (var b in world.EnemyBullets)
+        {
+            var p = P(b.X, b.Y, RoomMetrics.EnemyBulletY);
+            Raylib.DrawSphereEx(p, 0.085f, 6, 10, shell);
+            Raylib.DrawSphereEx(p, 0.045f, 6, 8, core);
+        }
+    }
+
     /// <summary>Pod room energy barriers: translucent amber slabs with bright edges (additive, unlit).</summary>
     private static void DrawPodBarriers(GameWorld world, GameConfig config)
     {
@@ -265,6 +297,7 @@ public sealed class SceneRenderer : IDisposable
 
         _room.DrawEmissive(world.Grid, level, time, doorColor, world.DoorClosed ? world.DoorSide : 0);
         DrawShells(world, 0.7f);
+        DrawEnemyShells(world, 0.85f);
         _fx.DrawEmissive();
         if (world.IsPodRoom && !world.PodOpen)
             BarrierBoxes(world, config, new Color((byte)255, (byte)200, (byte)60, (byte)110),
@@ -279,8 +312,6 @@ public sealed class SceneRenderer : IDisposable
             Raylib.DrawCube(feet + new Vector3(-0.15f, bodyH + 0.28f, 0.40f), 0.2f, 0.12f, 0.1f, new Color((byte)255, (byte)40, (byte)40, (byte)255));
             Raylib.DrawCube(feet + new Vector3(0.15f, bodyH + 0.28f, 0.40f), 0.2f, 0.12f, 0.1f, new Color((byte)255, (byte)40, (byte)40, (byte)255));
         }
-        foreach (var b in world.EnemyBullets) Raylib.DrawSphere(P(b.X, b.Y, RoomMetrics.BulletY), 0.3f, new Color((byte)255, (byte)150, (byte)40, (byte)255));
-        foreach (var b in world.Bullets) Raylib.DrawSphere(P(b.X, b.Y, RoomMetrics.BulletY), 0.32f, new Color((byte)120, (byte)210, (byte)255, (byte)255));
     }
 
     /// <summary>The two pod barriers of the room, each split into a slab above and below the moving slit.</summary>

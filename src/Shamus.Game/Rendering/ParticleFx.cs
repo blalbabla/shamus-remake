@@ -32,6 +32,7 @@ public sealed class ParticleFx
     private static readonly Color FlashColor = new(255, 250, 205, 255);
     private static readonly Color SparkColor = new(255, 210, 120, 255);
     private static readonly Color FireColor = new(255, 150, 40, 255);
+    private static readonly Color EmberColor = new(255, 110, 45, 120);
     private static readonly Color SmokeColor = new(186, 186, 194, 100);
     private static readonly Color SmokeDark = new(124, 124, 134, 95);
 
@@ -57,6 +58,25 @@ public sealed class ParticleFx
             Add(tail - dir * R(0f, 0.3f), -dir * R(0.3f, 0.9f) + Rand3(0.35f) + new Vector3(0f, R(0.1f, 0.4f), 0f),
                 R(0.24f, 0.38f), R(0.05f, 0.075f), R(0.2f, 0.34f), 2.2f, SmokeColor, Kind.Smoke);
         Add(tail, -dir * R(1f, 2f) + Rand3(0.2f), R(0.04f, 0.07f), R(0.05f, 0.08f), 0.02f, 3f, FireColor, Kind.Fire);
+    }
+
+    /// <summary>
+    /// Enemy shell wake: embers only, no smoke — a plasma bolt leaves a short fading streak, not a powder trail,
+    /// which also keeps it visually distinct from the player's shell. Dimmer than <see cref="FireColor"/> on purpose,
+    /// so the bolt itself stays the brightest thing in the streak.
+    /// </summary>
+    public void EnemyTrail(Vector3 tail, Vector3 dir)
+    {
+        Add(tail - dir * R(0f, 0.1f), -dir * R(0.3f, 0.7f) + Rand3(0.14f), R(0.1f, 0.17f),
+            R(0.028f, 0.042f), 0.01f, 2.5f, EmberColor, Kind.Fire);
+    }
+
+    /// <summary>Small orange flash at a shooter that just fired an enemy shell.</summary>
+    public void EnemyMuzzle(Vector3 at)
+    {
+        Add(at, Vector3.Zero, 0.07f, 0.07f, 0.14f, 0f, FireColor, Kind.Flash);
+        for (int i = 0; i < 2; i++)
+            Add(at, RandDir() * R(1.5f, 3.5f), R(0.06f, 0.12f), R(0.02f, 0.035f), 0.01f, 3f, SparkColor, Kind.Spark);
     }
 
     /// <summary>Impact burst: a flash, sparks outward and a smoke cloud that rises and swells.</summary>
