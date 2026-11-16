@@ -3,6 +3,7 @@
   "PlayerSpeed": 0.133,
   "TurnEasePerTick": 0.45,
   "TurnToleranceDeg": 9,
+  "MuzzleLength": 0.74,
   "DroneShooterChance": 0.5,
   "SnapJumpInterval": 60,
   "SnapJumpSpeed": 0.4,

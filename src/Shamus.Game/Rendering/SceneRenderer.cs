@@ -20,6 +20,8 @@ public sealed class SceneRenderer : IDisposable
     private readonly LightingShader _light = new();
     private readonly ShadowMap _shadow = new();
     private readonly GlowMap _glow = new();
+    private readonly ParticleFx _fx = new();
+    private float _trailTimer;
 
     public SceneRenderer(ViewMode mode = ViewMode.Top)
     {
@@ -50,6 +52,68 @@ public sealed class SceneRenderer : IDisposable
         deg %= 360f;
         return deg > 180f ? deg - 360f : deg < -180f ? deg + 360f : deg;
     }
+
+    /// <summary>
+    /// Turns the frame's world events into effects: a muzzle flash where a shot leaves the barrel, an impact burst
+    /// where a shell dies. Called right after every <c>GameWorld.Tick</c>, while the events are still fresh.
+    /// </summary>
+    public void OnEvents(GameWorld world)
+    {
+        foreach (var e in world.Events)
+        {
+            switch (e.Kind)
+            {
+                case WorldEventKind.Shot:
+                    var (fx, fy) = Facing(world.FaceX, world.FaceY);
+                    _fx.MuzzleFlash(P(e.X, e.Y, RoomMetrics.BarrelY), new Vector3(fx, 0f, fy));
+                    break;
+                case WorldEventKind.BulletHitWall:
+                case WorldEventKind.BulletHitBarrier:
+                case WorldEventKind.BulletsCancelled:
+                case WorldEventKind.BulletHitShadow:
+                case WorldEventKind.EnemyKilled:
+                case WorldEventKind.PodOpened:
+                    _fx.Impact(P(e.X, e.Y, RoomMetrics.BarrelY));
+                    break;
+            }
+        }
+    }
+
+    /// <summary>Advances the effects and leaves a smoke/fire trail behind every shell; dt = 0 freezes them (pause).</summary>
+    public void UpdateEffects(GameWorld world, float dt)
+    {
+        _fx.Update(dt);
+        if (dt <= 0f) return;
+        _trailTimer += dt;
+        const float TrailStep = 1f / 60f;   // emission rate is per tick, not per frame, so the trail density is stable
+        while (_trailTimer >= TrailStep)
+        {
+            _trailTimer -= TrailStep;
+            foreach (var b in world.Bullets)
+            {
+                var dir = Dir3(b);
+                _fx.Trail(P(b.X, b.Y, RoomMetrics.BarrelY) - dir * 0.12f, dir);
+            }
+        }
+    }
+
+    /// <summary>Drops every live effect, e.g. when a new game starts.</summary>
+    public void ResetEffects()
+    {
+        _fx.Clear();
+        _trailTimer = 0f;
+    }
+
+    /// <summary>Unit direction of the hull facing (falls back to +x before the player has moved).</summary>
+    private static (float X, float Y) Facing(int faceX, int faceY)
+    {
+        float fx = faceX, fy = faceY;
+        float len = MathF.Sqrt(fx * fx + fy * fy);
+        return len < 0.5f ? (1f, 0f) : (fx / len, fy / len);
+    }
+
+    /// <summary>Unit flight direction of a shell (always horizontal).</summary>
+    private static Vector3 Dir3(Bullet b) => Vector3.Normalize(new Vector3(b.DX, 0f, b.DY));
 
     /// <summary>Renders the light's depth map; call once per frame before <see cref="Draw"/>.</summary>
     public void RenderShadow(GameWorld world, float alpha)
@@ -89,7 +153,9 @@ public sealed class SceneRenderer : IDisposable
         Vector3? mysteryPos = DrawWorld(world, alpha, shadowPass: false);
         _light.End();
 
-        // Unlit: floor title, pod barriers and the translucent force-field walls.
+        // Unlit: shells, effects, floor title, pod barriers and the translucent force-field walls.
+        DrawShells(world);
+        _fx.Draw();
         _room.DrawTitle(world.Room);
         if (world.IsPodRoom && !world.PodOpen) DrawPodBarriers(world, config);
         _room.DrawWalls(world.Grid, doorColor, doorSide);
@@ -150,10 +216,33 @@ public sealed class SceneRenderer : IDisposable
         }
         if (world.ShadowActive) DrawShadow(P(world.ShadowX, world.ShadowY, 0f));
         foreach (var b in world.EnemyBullets) Raylib.DrawSphere(P(b.X, b.Y, RoomMetrics.BulletY), 0.2f, Color.Orange);
-        foreach (var b in world.Bullets) Raylib.DrawSphere(P(b.X, b.Y, RoomMetrics.BulletY), 0.22f, Color.SkyBlue);
 
         return mysteryPos;
     }
+
+    /// <summary>
+    /// Player shells: a slim yellow cylinder of the barrel's diameter with a bright cone on the nose, drawn along the
+    /// flight direction and at the barrel height, so a shot visibly leaves the muzzle and travels where it collides.
+    /// <paramref name="intensity"/> scales the colour for the glow pass, where a full-brightness shell would bloom
+    /// into a ball larger than the tank.
+    /// </summary>
+    private static void DrawShells(GameWorld world, float intensity = 1f)
+    {
+        var body = Dim(new Color((byte)255, (byte)205, (byte)60, (byte)255), intensity);
+        var tip = Dim(new Color((byte)255, (byte)245, (byte)170, (byte)255), intensity);
+        foreach (var b in world.Bullets)
+        {
+            var dir = Dir3(b);
+            var p = P(b.X, b.Y, RoomMetrics.BarrelY);
+            var tail = p - dir * 0.12f;
+            var nose = p + dir * 0.10f;
+            Raylib.DrawCylinderEx(tail, nose, 0.055f, 0.055f, 8, body);          // barrel diameter
+            Raylib.DrawCylinderEx(nose, nose + dir * 0.11f, 0.055f, 0.004f, 8, tip);   // cone nose
+        }
+    }
+
+    private static Color Dim(Color c, float f) =>
+        new((byte)(c.R * f), (byte)(c.G * f), (byte)(c.B * f), c.A);
 
     /// <summary>Pod room energy barriers: translucent amber slabs with bright edges (additive, unlit).</summary>
     private static void DrawPodBarriers(GameWorld world, GameConfig config)
@@ -175,6 +264,8 @@ public sealed class SceneRenderer : IDisposable
         Color? doorColor = world.DoorClosed && world.Obj != null ? AtariPalette.ToColor(world.Obj.Hue, world.Obj.Luma) : null;
 
         _room.DrawEmissive(world.Grid, level, time, doorColor, world.DoorClosed ? world.DoorSide : 0);
+        DrawShells(world, 0.7f);
+        _fx.DrawEmissive();
         if (world.IsPodRoom && !world.PodOpen)
             BarrierBoxes(world, config, new Color((byte)255, (byte)200, (byte)60, (byte)110),
                 new Color((byte)255, (byte)240, (byte)160, (byte)255), wires: false);
@@ -249,10 +340,11 @@ public sealed class SceneRenderer : IDisposable
         // hull, then a slightly lighter top plate
         Raylib.DrawCube(new Vector3(0, hullY, 0), 0.68f, 0.30f, 0.94f, hull);
         Raylib.DrawCube(new Vector3(0, plateY, -0.02f), 0.56f, 0.06f, 0.80f, hullTop);
-        // turret ring, small dome, barrel pointing forward
+        // turret ring, small dome, barrel pointing forward (the muzzle sits at GameConfig.MuzzleLength)
         Raylib.DrawCylinder(new Vector3(0, ringY, 0), 0.23f, 0.24f, 0.08f, 14, turret);
         Raylib.DrawSphere(new Vector3(0, domeY, 0), 0.20f, dome);
-        Raylib.DrawCylinderEx(new Vector3(0, domeY, 0.14f), new Vector3(0, domeY, 0.74f), 0.055f, 0.045f, 10, gun);
+        Raylib.DrawCylinderEx(new Vector3(0, RoomMetrics.BarrelY, 0.14f), new Vector3(0, RoomMetrics.BarrelY, 0.74f),
+            0.055f, 0.045f, 10, gun);
         Rlgl.PopMatrix();
     }
 

@@ -15,6 +15,8 @@ public sealed class GameConfig
     public float TurnEasePerTick { get; init; } = 0.45f;
     /// <summary>The hull drives only once it is this close to the pressed direction, in degrees.</summary>
     public float TurnToleranceDeg { get; init; } = 9f;
+    /// <summary>Where a shot leaves the tank, in cells from its centre: the barrel tip (see SceneRenderer.DrawTank).</summary>
+    public float MuzzleLength { get; init; } = 0.74f;
     public float BulletSpeed { get; init; } = 0.6f;
     public int MaxBullets { get; init; } = 3;
     public int FireCooldown { get; init; } = 8;

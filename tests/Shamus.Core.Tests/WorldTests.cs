@@ -59,6 +59,19 @@ public class WorldTests
     }
 
     [Fact]
+    public void ShotLeavesTheMuzzle()
+    {
+        var w = new GameWorld(Maze(), new GameConfig(), 3);   // chamber, facing +x
+        w.Enemies.Clear();
+        float x0 = w.PlayerX;
+
+        w.Tick(new InputState(0, 0, true));
+        var b = Assert.Single(w.Bullets);
+        Assert.True(b.X > x0 + 0.7f, $"the shell must start at the barrel tip, got x={b.X} for player x={x0}");
+        Assert.Equal(w.PlayerY, b.Y, 3);
+    }
+
+    [Fact]
     public void FirstPressTurnsInPlaceThenDrives()
     {
         var w = new GameWorld(Maze(), new GameConfig(), 3);   // a chamber: the middle band is free to drive along

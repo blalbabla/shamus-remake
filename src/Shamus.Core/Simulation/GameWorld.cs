@@ -502,9 +502,14 @@ public sealed class GameWorld
     private void Fire()
     {
         float len = (FaceX != 0 && FaceY != 0) ? 0.70710678f : 1f;
-        Bullets.Add(new Bullet { X = PlayerX, Y = PlayerY, DX = FaceX * len * Config.BulletSpeed, DY = FaceY * len * Config.BulletSpeed });
+        // The shell leaves the barrel tip, so what is drawn and what collides are the same point. If the muzzle
+        // sits inside a wall (shooting point-blank) the shot starts at the hull instead, where it dies at once.
+        float mx = PlayerX + FaceX * len * Config.MuzzleLength;
+        float my = PlayerY + FaceY * len * Config.MuzzleLength;
+        if (Grid.IsSolid((int)MathF.Floor(mx), (int)MathF.Floor(my))) { mx = PlayerX; my = PlayerY; }
+        Bullets.Add(new Bullet { X = mx, Y = my, DX = FaceX * len * Config.BulletSpeed, DY = FaceY * len * Config.BulletSpeed });
         _cooldown = Config.FireCooldown;
-        Events.Add(new WorldEvent(WorldEventKind.Shot, PlayerX, PlayerY));
+        Events.Add(new WorldEvent(WorldEventKind.Shot, mx, my));
     }
 
     private void UpdateBullets()

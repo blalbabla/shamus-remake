@@ -214,6 +214,7 @@ public sealed class GameApp
         _map = MapLayout.Load(Path.Combine(AppContext.BaseDirectory, "assets", "maps"), _maze);
         _startRoom = room;
         _world = new GameWorld(_maze, _config, room);
+        _scene.ResetEffects();
         _acc = 0; _gameOverTimer = 0; _newHigh = false;
         _state = AppState.Playing;
     }
@@ -244,6 +245,7 @@ public sealed class GameApp
             && float.TryParse(look[1], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float ly))
             _scene.Rig.Look = new System.Numerics.Vector3(lx - 20f, 0, ly - 11f);
         string shot = Arg("--shot");
+        int shotFrame = int.TryParse(Arg("--shotframe"), out int sf) && sf > 0 ? sf : 8;   // debug: capture a later frame
         int frame = 0;
         _audio.Init();
         ApplyAudioSettings();
@@ -300,7 +302,7 @@ public sealed class GameApp
             Rlgl.LoadIdentity();
             Rlgl.DisableScissorTest();
             Raylib.EndDrawing();
-            if (shot.Length > 0 && ++frame == 8)   // debug: save one frame and quit
+            if (shot.Length > 0 && ++frame == shotFrame)   // debug: save one frame and quit
             {
                 var img = Raylib.LoadImageFromScreen();
                 Raylib.ExportImage(img, shot);
@@ -320,6 +322,7 @@ public sealed class GameApp
         if (Raylib.IsKeyPressed(KeyboardKey.F2)) { _settings.Muted = !_settings.Muted; ApplyAudioSettings(); _settings.Save(); }
         _hud.Update(dt);
         _scene.Rig.Update(dt);
+        _scene.UpdateEffects(_world, _state == AppState.Playing ? dt : 0f);   // frozen while paused or on the map
         if (Raylib.IsKeyPressed(KeyboardKey.V))   // works in every state, including pause and map
         {
             _scene.Rig.Toggle(); _settings.View = _scene.Rig.Mode; _settings.Save();
@@ -366,7 +369,8 @@ public sealed class GameApp
                 bool up = Down(KeyboardKey.W, KeyboardKey.Up, KeyboardKey.Kp8, KeyboardKey.Kp7, KeyboardKey.Kp9, KeyboardKey.Home, KeyboardKey.PageUp);
                 bool dn = Down(KeyboardKey.S, KeyboardKey.Down, KeyboardKey.Kp2, KeyboardKey.Kp1, KeyboardKey.Kp3, KeyboardKey.End, KeyboardKey.PageDown);
                 int mx = (right ? 1 : 0) - (left ? 1 : 0), my = (dn ? 1 : 0) - (up ? 1 : 0);
-                bool fire = Down(KeyboardKey.Space, KeyboardKey.LeftControl, KeyboardKey.RightControl, KeyboardKey.Kp0, KeyboardKey.Kp5);
+                bool fire = Down(KeyboardKey.Space, KeyboardKey.LeftControl, KeyboardKey.RightControl, KeyboardKey.Kp0, KeyboardKey.Kp5)
+                    || _args.Contains("--fire");   // debug: hold the trigger, so --shot can capture shells and effects
 
                 _acc = MathF.Min(_acc + dt, 0.1f);
                 while (_acc >= Step)
@@ -374,6 +378,7 @@ public sealed class GameApp
                     _world.Tick(new InputState(mx, my, fire));
                     _audio.Handle(_world.Events);
                     _hud.OnEvents(_world.Events);
+                    _scene.OnEvents(_world);
                     _acc -= Step;
                 }
                 if (_world.Phase == GamePhase.GameOver)

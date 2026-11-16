@@ -33,6 +33,12 @@ public static class RoomMetrics
     /// <summary>Tank track (caterpillar) height; it also sets how far the hull drops below the track tops.</summary>
     public const float TrackHeight = 0.34f;
 
+    /// <summary>
+    /// Barrel centre height: the gun sits at the dome centre, so it drops with the hull. Shells fly at this height,
+    /// which is also where <c>GameConfig.MuzzleLength</c> puts them along the barrel.
+    /// </summary>
+    public const float BarrelY = 0.70f - TrackHeight / 2f;
+
     /// <summary>Tallest enemy, dome/head included.</summary>
     public const float EnemyHeight = 0.96f;
 
