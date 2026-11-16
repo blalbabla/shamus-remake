@@ -263,6 +263,10 @@ public sealed class GameApp
             Rlgl.DisableScissorTest();
             Raylib.ClearBackground(Color.Black);
 
+            // Shadow map first: it switches framebuffers and resets matrices, so it runs before the letterbox setup.
+            if (_state is not (AppState.Title or AppState.Settings))
+                _scene.RenderShadow(_world, _state == AppState.Playing ? _acc / Step : 1f);
+
             // Render at the window's native resolution, letterboxed to the fixed 16:9 design space
             // (so MSAA stays active and fullscreen uses the display resolution).
             int sw = Raylib.GetScreenWidth(), sh = Raylib.GetScreenHeight();

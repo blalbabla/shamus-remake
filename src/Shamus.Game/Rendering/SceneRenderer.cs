@@ -17,61 +17,78 @@ public sealed class SceneRenderer : IDisposable
 
     public CameraRig Rig { get; }
     private readonly RoomView _room = new();
+    private readonly LightingShader _light = new();
+    private readonly ShadowMap _shadow = new();
 
-    public SceneRenderer(ViewMode mode = ViewMode.Top) { Rig = new CameraRig(mode); }
+    public SceneRenderer(ViewMode mode = ViewMode.Top)
+    {
+        Rig = new CameraRig(mode);
+        _light.UseShadows(_shadow);
+    }
 
-    public void Dispose() => _room.Dispose();
+    public void Dispose()
+    {
+        _light.Dispose();
+        _shadow.Dispose();
+        _room.Dispose();
+    }
 
     private const float Ox = -RoomGrid.W / 2f, Oz = -RoomGrid.H / 2f;
     private static Vector3 P(float x, float y, float h) => new(Ox + x, h, Oz + y);
 
-    /// <summary>Renders the world; returns the screen position for the "?" label of a mystery bonus, if any.</summary>
+    /// <summary>Renders the light's depth map; call once per frame before <see cref="Draw"/>.</summary>
+    public void RenderShadow(GameWorld world, float alpha)
+    {
+        if (!_shadow.IsValid) return;
+        _shadow.Begin(_light.LightDirection);
+        DrawWorld(world, alpha, shadowPass: true);
+        _shadow.End();
+    }
+
+    /// <summary>Renders the lit world, then unlit translucent overlays and the 2D "?" label.</summary>
     public void Draw(GameWorld world, GameConfig config, float alpha)
     {
         var maze = world.Maze;
-        Vector3? mysteryPos = null;
-        Rig.BeginView();
-
-        int level = maze.Level(world.Room);
         Color? doorColor = world.DoorClosed && world.Obj != null ? AtariPalette.ToColor(world.Obj.Hue, world.Obj.Luma) : null;
         int doorSide = world.DoorClosed ? world.DoorSide : 0;
+
+        Rig.BeginView();
+        _light.Begin();
+        Vector3? mysteryPos = DrawWorld(world, alpha, shadowPass: false);
+        _light.End();
+
+        // Unlit: floor title, pod barriers and the translucent force-field walls.
+        _room.DrawTitle(world.Room);
+        if (world.IsPodRoom && !world.PodOpen) DrawPodBarriers(world, config);
+        _room.DrawWalls(world.Grid, doorColor, doorSide);
+        Rig.EndView();
+
+        if (mysteryPos is Vector3 mp)
+        {
+            var sp = Raylib.GetWorldToScreenEx(mp, Rig.Camera, VirtualWidth, VirtualHeight);
+            Raylib.DrawText("?", (int)sp.X - 8, (int)sp.Y - 14, 32, Color.White);
+        }
+    }
+
+    /// <summary>Opaque, shadow-casting world contents. The shadow pass skips the floor so only casters write depth.</summary>
+    private Vector3? DrawWorld(GameWorld world, float alpha, bool shadowPass)
+    {
+        var maze = world.Maze;
+        int level = maze.Level(world.Room);
         double time = Raylib.GetTime();
-        _room.DrawSolid(world.Grid, world.Room, level, time, doorColor, doorSide);
+        Vector3? mysteryPos = null;
+
+        if (shadowPass) _room.DrawPosts(world.Grid, level, time);
+        else _room.DrawSolid(world.Grid, level, time);
 
         if (world.Obj != null) mysteryPos = DrawObject(world.Obj);
-
-        if (world.IsPodRoom && !world.PodOpen)
-        {
-            // energy barriers: translucent amber slabs with bright edges
-            Rlgl.DrawRenderBatchActive();   // flush opaque geometry before depth writes are disabled
-            Rlgl.DisableDepthMask();
-            Raylib.BeginBlendMode(BlendMode.Additive);
-            for (int i = 0; i < 2; i++)
-            {
-                float bx = config.PodBarrierX0[i] + config.PodBarrierWidth / 2f;
-                float s0 = world.SlitY[i], sh = config.PodSlitHeight;
-                float topH = s0 - 1f, botY0 = s0 + sh, botH = RoomGrid.H - 1f - botY0;
-                var fill = new Color((byte)255, (byte)190, (byte)30, (byte)70);
-                var edge = new Color((byte)255, (byte)230, (byte)120, (byte)200);
-                foreach (var (cy, hh) in new[] { (1f + topH / 2f, topH), (botY0 + botH / 2f, botH) })
-                {
-                    Raylib.DrawCube(P(bx, cy, 0.8f), config.PodBarrierWidth, 1.6f, hh, fill);
-                    Raylib.DrawCubeWires(P(bx, cy, 0.8f), config.PodBarrierWidth, 1.6f, hh, edge);
-                }
-            }
-            Raylib.EndBlendMode();
-            Rlgl.EnableDepthMask();
-        }
 
         float px = world.PrevPlayerX + (world.PlayerX - world.PrevPlayerX) * alpha;
         float py = world.PrevPlayerY + (world.PlayerY - world.PrevPlayerY) * alpha;
         if (world.Phase != GamePhase.GameOver)
         {
             bool flash = world.Phase == GamePhase.Dying && (world.TickCount / 4) % 2 == 0;
-            var pc = P(px, py, 0.9f);
-            Raylib.DrawCube(pc, 0.8f, 1.6f, 0.8f, flash ? Color.White : Color.Gold);
-            Raylib.DrawSphere(pc + new Vector3(0, 1.1f, 0), 0.42f, flash ? Color.White : Color.Orange);
-            Raylib.DrawCube(pc + new Vector3(world.FaceX * 0.5f, 0.2f, world.FaceY * 0.5f), 0.25f, 0.25f, 0.25f, Color.Red);
+            DrawTank(px, py, world.FaceX, world.FaceY, flash);
         }
 
         double now = Raylib.GetTime();
@@ -106,13 +123,57 @@ public sealed class SceneRenderer : IDisposable
         foreach (var b in world.EnemyBullets) Raylib.DrawSphere(P(b.X, b.Y, 0.9f), 0.2f, Color.Orange);
         foreach (var b in world.Bullets) Raylib.DrawSphere(P(b.X, b.Y, 0.9f), 0.22f, Color.SkyBlue);
 
-        _room.DrawBeamShells(world.Grid, level, doorColor, doorSide);
-        Rig.EndView();
-        if (mysteryPos is Vector3 mp)
+        return mysteryPos;
+    }
+
+    /// <summary>Pod room energy barriers: translucent amber slabs with bright edges (additive, unlit).</summary>
+    private static void DrawPodBarriers(GameWorld world, GameConfig config)
+    {
+        Rlgl.DrawRenderBatchActive();   // flush opaque geometry before depth writes are disabled
+        Rlgl.DisableDepthMask();
+        Raylib.BeginBlendMode(BlendMode.Additive);
+        for (int i = 0; i < 2; i++)
         {
-            var sp = Raylib.GetWorldToScreenEx(mp, Rig.Camera, VirtualWidth, VirtualHeight);
-            Raylib.DrawText("?", (int)sp.X - 8, (int)sp.Y - 14, 32, Color.White);
+            float bx = config.PodBarrierX0[i] + config.PodBarrierWidth / 2f;
+            float s0 = world.SlitY[i], sh = config.PodSlitHeight;
+            float topH = s0 - 1f, botY0 = s0 + sh, botH = RoomGrid.H - 1f - botY0;
+            var fill = new Color((byte)255, (byte)190, (byte)30, (byte)70);
+            var edge = new Color((byte)255, (byte)230, (byte)120, (byte)200);
+            foreach (var (cy, hh) in new[] { (1f + topH / 2f, topH), (botY0 + botH / 2f, botH) })
+            {
+                Raylib.DrawCube(P(bx, cy, 0.8f), config.PodBarrierWidth, 1.6f, hh, fill);
+                Raylib.DrawCubeWires(P(bx, cy, 0.8f), config.PodBarrierWidth, 1.6f, hh, edge);
+            }
         }
+        Raylib.EndBlendMode();
+        Rlgl.EnableDepthMask();
+    }
+
+    /// <summary>Hero: a small tank with a boxy hull, two tracks, a dome turret and a gun barrel.</summary>
+    private static void DrawTank(float px, float py, int faceX, int faceY, bool flash)
+    {
+        float fx = faceX, fy = faceY;
+        float len = MathF.Sqrt(fx * fx + fy * fy);
+        if (len < 0.5f) { fx = 1; fy = 0; len = 1; }
+        fx /= len; fy /= len;
+        float yaw = MathF.Atan2(fx, fy) * (180f / MathF.PI);
+
+        var hull = flash ? Color.White : new Color((byte)86, (byte)150, (byte)86, (byte)255);
+        var track = flash ? Color.White : new Color((byte)80, (byte)82, (byte)95, (byte)255);
+        var dome = flash ? Color.White : new Color((byte)170, (byte)225, (byte)150, (byte)255);
+        var gun = flash ? Color.White : new Color((byte)120, (byte)122, (byte)135, (byte)255);
+
+        var b = P(px, py, 0);
+        Rlgl.PushMatrix();
+        Rlgl.Translatef(b.X, 0, b.Z);
+        Rlgl.Rotatef(yaw, 0, 1, 0);   // local +Z is forward
+        Raylib.DrawCube(new Vector3(-0.46f, 0.17f, 0), 0.20f, 0.34f, 1.10f, track);
+        Raylib.DrawCube(new Vector3(0.46f, 0.17f, 0), 0.20f, 0.34f, 1.10f, track);
+        Raylib.DrawCube(new Vector3(0, 0.38f, 0), 0.72f, 0.32f, 0.96f, hull);
+        Raylib.DrawCylinder(new Vector3(0, 0.56f, -0.02f), 0.24f, 0.26f, 0.08f, 12, new Color((byte)150, (byte)205, (byte)130, (byte)255));
+        Raylib.DrawSphere(new Vector3(0, 0.62f, -0.02f), 0.30f, dome);
+        Raylib.DrawCylinderEx(new Vector3(0, 0.64f, 0.10f), new Vector3(0, 0.64f, 0.80f), 0.065f, 0.055f, 10, gun);
+        Rlgl.PopMatrix();
     }
 
     private static Vector3? DrawObject(RoomObject o)

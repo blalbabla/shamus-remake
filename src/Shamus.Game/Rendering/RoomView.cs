@@ -10,17 +10,21 @@ namespace Shamus.Game.Rendering;
 /// </summary>
 public sealed class RoomView : IDisposable
 {
-    // neon beam colour per level (black/first level = red as in the concept sketch)
+    // neon colour of the generator caps per level (black/first level = red as in the concept sketch)
     public static readonly Color[] Neon =
     {
         new(255, 70, 25, 255), new(70, 130, 255, 255), new(70, 255, 110, 255), new(255, 60, 70, 255),
     };
     private static readonly Color FloorColor = new(34, 36, 46, 255), ClosedColor = new(18, 18, 26, 255);
     private static readonly Color PostBody = new(46, 88, 235, 255), PostTop = new(110, 160, 255, 255), PostEdge = new(20, 40, 130, 255);
+    // the electrified walls are pink force fields
+    private static readonly Color FieldPink = new(255, 120, 190, 255);
+    private const float FieldHeight = 0.8f;
+    private const float FieldThickness = 0.30f;
+    private const byte FieldAlpha = 140;
 
     private const float Ox = -RoomGrid.W / 2f, Oz = -RoomGrid.H / 2f;
     private static Vector3 P(float x, float y, float h) => new(Ox + x, h, Oz + y);
-    private static readonly float[] BeamHeights = { 0.55f, 1.05f };
 
     private Font _font;
     private bool _fontLoaded;
@@ -78,8 +82,8 @@ public sealed class RoomView : IDisposable
         for (int i = 0; i < mask.Length; i++) px[i] = mask[i] && !eroded[i] ? line : new Color((byte)0, (byte)0, (byte)0, (byte)0);
     }
 
-    /// <summary>Opaque parts: floor, closed areas, title, generator posts and the beam cores.</summary>
-    public void DrawSolid(RoomGrid grid, int room, int level, double time, Color? doorColor, int doorSide)
+    /// <summary>Opaque parts: floor, closed areas and the generator posts.</summary>
+    public void DrawSolid(RoomGrid grid, int level, double time)
     {
         Raylib.DrawCube(new Vector3(0, -0.5f, 0), RoomGrid.W, 1, RoomGrid.H, FloorColor);
 
@@ -92,53 +96,41 @@ public sealed class RoomView : IDisposable
                 Raylib.DrawCube(P((x0 + x) / 2f, y + 0.5f, 0.01f), x - x0, 0.02f, 1f, ClosedColor);
             }
 
-        DrawTitle(room);
+        DrawPosts(grid, level, time);
+    }
 
+    /// <summary>Opaque generator posts; also drawn into the shadow map as casters.</summary>
+    public void DrawPosts(RoomGrid grid, int level, double time)
+    {
         var neon = Neon[Math.Clamp(level, 0, 3)];
         var walls = grid.Walls;
         float pulse = 0.85f + 0.15f * MathF.Sin((float)time * 3f);
 
         foreach (var (x, y) in walls.Posts)
         {
-            var c = P(x, y, 0.8f);
-            Raylib.DrawCube(c, 0.9f, 1.6f, 0.9f, PostBody);
-            Raylib.DrawCube(P(x, y, 1.62f), 0.9f, 0.04f, 0.9f, PostTop);                       // solid lighter top face
+            var c = P(x, y, 0.4f);
+            Raylib.DrawCube(c, 0.9f, 0.8f, 0.9f, PostBody);
+            Raylib.DrawCube(P(x, y, 0.82f), 0.9f, 0.04f, 0.9f, PostTop);                       // solid lighter top face
             //Raylib.DrawCubeWires(c, 0.9f, 1.6f, 0.9f, PostEdge);
-            Raylib.DrawCube(P(x, y, 1.68f), 0.4f, 0.1f, 0.4f, Brighten(neon, 0.75f + 0.25f * pulse));   // solid neon cap
-        }
-
-        foreach (var s in walls.Segments)
-        {
-            var col = IsDoor(s, doorSide) && doorColor is Color dc ? dc : neon;
-            foreach (float h in BeamHeights)
-                Beam(s, h, 0.20f, Brighten(col, pulse), 1f);      // pass 1: bright central beam
+            Raylib.DrawCube(P(x, y, 0.88f), 0.4f, 0.1f, 0.4f, Brighten(neon, 0.75f + 0.25f * pulse));   // solid neon cap
         }
     }
 
-    /// <summary>
-    /// Beam passes 2 and 3: a wider semi-transparent body and a very wide, partially transparent halo.
-    /// Drawn additively with depth writes off (after flushing the opaque batch) so the light does not occlude solids.
-    /// </summary>
-    public void DrawBeamShells(RoomGrid grid, int level, Color? doorColor, int doorSide)
+    /// <summary>Translucent pink force-field walls: one vertical panel per wall segment, drawn after opaque geometry.</summary>
+    public void DrawWalls(RoomGrid grid, Color? doorColor, int doorSide)
     {
-        var neon = Neon[Math.Clamp(level, 0, 3)];
         var walls = grid.Walls;
-        // Flush the queued opaque geometry (posts, beams, floor) while depth writes are still on.
+        // Flush the queued opaque geometry while depth writes are still on.
         // DisableDepthMask only changes GL state and does not flush raylib's batch: without this call
-        // the posts would be rasterised with depth writes off, so the glow would draw over them.
+        // the posts would be rasterised with depth writes off, so the walls would draw over them.
         Rlgl.DrawRenderBatchActive();
         Rlgl.DisableDepthMask();
-        Raylib.BeginBlendMode(BlendMode.Additive);
+        Raylib.BeginBlendMode(BlendMode.Alpha);
         foreach (var s in walls.Segments)
         {
-            var col = IsDoor(s, doorSide) && doorColor is Color dc ? dc : neon;
-            var body = new Color(col.R, col.G, col.B, (byte)150);
-            var halo = new Color(col.R, col.G, col.B, (byte)40);
-            foreach (float h in BeamHeights)
-            {
-                Beam(s, h, 0.32f, body, 1f);   // pass 2: less bright, thicker, semi-transparent
-                Beam(s, h, 0.40f, halo, 1f);   // pass 3: thick, almost transparent
-            }
+            var col = IsDoor(s, doorSide) && doorColor is Color dc ? dc : FieldPink;
+            Field(s, new Color(col.R, col.G, col.B, FieldAlpha));
+            FieldEdge(s, new Color((byte)255, (byte)200, (byte)235, (byte)240));   // bright top rim: reads as the field boundary
         }
         Raylib.EndBlendMode();
         Rlgl.EnableDepthMask();
@@ -153,18 +145,24 @@ public sealed class RoomView : IDisposable
 
     private static Color Brighten(Color c, float f) => new((byte)Math.Min(255, c.R * f), (byte)Math.Min(255, c.G * f), (byte)Math.Min(255, c.B * f), c.A);
 
-    private const float PostHalf = 0.42f;   // beams start at the side faces of the generators, not at their centres
+    private const float PostHalf = 0.42f;   // walls start at the side faces of the generators, not at their centres
 
-    private static void Beam(WallSegment s, float height, float thickness, Color color, float _)
+    /// <summary>One vertical translucent panel along a wall segment, between the generator side faces.</summary>
+    private static void Field(WallSegment s, Color color) => FieldBox(s, FieldHeight / 2f, FieldHeight, FieldThickness, color);
+
+    /// <summary>Bright thin line along the top of a field wall.</summary>
+    private static void FieldEdge(WallSegment s, Color color) => FieldBox(s, FieldHeight, 0.05f, 0.12f, color);
+
+    private static void FieldBox(WallSegment s, float centerY, float height, float thickness, Color color)
     {
         float cx = (s.X0 + s.X1) / 2f, cy = (s.Y0 + s.Y1) / 2f;
         float lx = MathF.Abs(s.X1 - s.X0), ly = MathF.Abs(s.Y1 - s.Y0);
-        if (lx > ly) lx -= 2 * PostHalf; else ly -= 2 * PostHalf;   // shorten by the half-width of the posts at both ends
+        if (lx > ly) lx -= 2 * PostHalf; else ly -= 2 * PostHalf;
         if (MathF.Max(lx, ly) < 0.05f) return;
-        Raylib.DrawCube(P(cx, cy, height), MathF.Max(lx, thickness), thickness, MathF.Max(ly, thickness), color);
+        Raylib.DrawCube(P(cx, cy, centerY), MathF.Max(lx, thickness), height, MathF.Max(ly, thickness), color);
     }
 
-    private void DrawTitle(int room)
+    public void DrawTitle(int room)
     {
         var tex = Title(room);
         // must fit inside the central square of the '#' grid (x 16.5..23.5), clear of the walls
