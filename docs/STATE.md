@@ -77,7 +77,7 @@ src/Shamus.Game/                 Raylib-фронтенд
   Rendering/LightingShader.cs    Lambert + ambient + PCF-тени 5x5
   Rendering/ShadowMap.cs         depth-FBO 2048, ортокамера света
   Rendering/GlowMap.cs           эмиссия в 1/4-кадр, 2 блюра, аддитивная композиция
-  Rendering/RoomMetrics.cs       единый масштаб высот (стены = 1.0 клетки)
+  Rendering/RoomMetrics.cs       единый масштаб высот (стена = 0.5 клетки, ниже персонажей)
   Rendering/AtariPalette.cs      палитра Atari
   Ui/                            Hud, Menu, SettingsMenu, Settings, MapView
   Audio/                         Dsp, ProceduralSfx, AmbientSynth, AudioManager
@@ -156,9 +156,13 @@ artifacts/                       исходники (ATR, PDF, скриншот�
 ## 6. Что сделано в последней сессии
 
 - Введён `RoomMetrics`: один масштаб для всего, что стоит в комнате (1 единица = 1 клетка). Стена
-  (силовое поле) = 1.0, столбик 0.9x1.0, pod-барьер = высота стены, танк 0.73, враги не выше 0.96,
-  предметы не выше 0.96, Shadow 1.45 — выше стен намеренно. Всё «прижато» к полу: раньше враги
-  (до 1.8) и предметы (до 1.4) торчали выше стен (0.8), а pod-барьеры были 1.6.
+  (силовое поле) = 0.5 (половина клетки), столбик 0.9x0.5, pod-барьер = высота стены, танк 0.73,
+  враги не выше 0.96, предметы не выше 0.96, пули 0.35, Shadow 1.45. Всё «прижато» к полу: раньше
+  враги (до 1.8) и предметы (до 1.4) торчали выше стен (0.8), а pod-барьеры были 1.6.
+- Стены и столбики уменьшены вдвое (1.0 → 0.5): при 1.0 панели в изометрии сильно перекрывали танк
+  и врагов. Заодно в тот же масштаб приведены пули (0.86 → 0.35), чтобы пуля, остановленная стеной,
+  рисовалась в полосе стены, а не над ней. Pod-барьеры привязаны к высоте стены и уменьшились вместе
+  с ней — если их нужно вернуть выше, это одна строка `RoomMetrics.PodBarrierHeight`.
 - Добавлено свечение (`GlowMap`): эмиссия в FBO 1/4 кадра, два separable-блюра (9-tap гаусс),
   аддитивная композиция поверх сцены. Светятся силовые поля и их кромки, «шапки» генераторов,
   барьеры pod-комнат, пули, куб mystery и глаза Shadow (`Strength = 0.55`).
@@ -206,7 +210,7 @@ artifacts/                       исходники (ATR, PDF, скриншот�
 | Новый враг | `EnemyKind`, ветки в `GameWorld.Decide/UpdateEnemies`, отрисовка в `SceneRenderer` |
 | Внешний вид стен | `RoomView`: `FieldPink`, `FieldHeight`, `FieldThickness`, `FieldAlpha` |
 | Столбики-генераторы | `RoomView.DrawPosts`, `PostBody/Top` |
-| Высоты в комнате | `Rendering/RoomMetrics.cs` (единый масштаб; стена = 1.0 клетки) |
+| Высоты в комнате | `Rendering/RoomMetrics.cs` (единый масштаб; стена = 0.5 клетки, ниже персонажей) |
 | Свет и тени | `LightingShader` (`LightDirection`, `Ambient`, `Diffuse`), `ShadowMap` |
 | Свечение/bloom | `GlowMap` (`Strength`), `RoomView.DrawEmissive`, `SceneRenderer.DrawEmissive` |
 | Танк | `SceneRenderer.DrawTank` |
