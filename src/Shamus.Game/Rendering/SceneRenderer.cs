@@ -167,6 +167,10 @@ public sealed class SceneRenderer : IDisposable
         DrawJumpers(world, (float)Raylib.GetTime());
         _light.End();
 
+        // Plateau sides are unlit: a flat colour leaves no shaded return face in the convex corners.
+        if (Rig.IsometricBlend > 0.5f)
+            _room.DrawPlateauSides(world.Grid, (int)MathF.Floor(world.PlayerX), (int)MathF.Floor(world.PlayerY));
+
         // Unlit: shells, effects, floor title, pod barriers and the translucent force-field walls.
         DrawShells(world);
         DrawEnemyShells(world);
@@ -188,7 +192,8 @@ public sealed class SceneRenderer : IDisposable
         double time = Raylib.GetTime();
 
         if (shadowPass) _room.DrawPosts(world.Grid, level, time);
-        else _room.DrawSolid(world.Grid, level, time);
+        else _room.DrawSolid(world.Grid, level, time, cliff: Rig.IsometricBlend > 0.5f,
+            (int)MathF.Floor(world.PlayerX), (int)MathF.Floor(world.PlayerY));
 
         if (world.Obj != null) DrawItem(world.Obj, time);
 

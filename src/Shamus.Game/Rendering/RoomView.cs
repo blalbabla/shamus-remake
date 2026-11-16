@@ -16,6 +16,8 @@ public sealed class RoomView : IDisposable
         new(255, 70, 25, 255), new(70, 130, 255, 255), new(70, 255, 110, 255), new(255, 60, 70, 255),
     };
     private static readonly Color FloorColor = new(34, 36, 46, 255), ClosedColor = new(18, 18, 26, 255);
+    private static readonly Color CliffColor = new(48, 58, 88, 255), CliffShade = new(30, 36, 56, 255), CliffLip = new(95, 118, 170, 255);
+    private const float CliffDepth = 24f;
     private static readonly Color PostBody = new(46, 88, 235, 255), PostTop = new(110, 160, 255, 255);
     // the electrified walls are pink force fields
     private static readonly Color FieldPink = new(255, 120, 190, 255);
@@ -82,21 +84,92 @@ public sealed class RoomView : IDisposable
         for (int i = 0; i < mask.Length; i++) px[i] = mask[i] && !eroded[i] ? line : new Color((byte)0, (byte)0, (byte)0, (byte)0);
     }
 
-    /// <summary>Opaque parts: floor, closed areas and the generator posts.</summary>
-    public void DrawSolid(RoomGrid grid, int level, double time)
+    /// <summary>
+    /// Opaque parts: floor, closed areas and the generator posts. In the isometric view the room is a plateau
+    /// shaped like the hero's reachable area: a thick plus in chambers, the passage in corridors. Dark side walls
+    /// follow the whole closed contour and drop far down; everything outside the plateau is the drop.
+    /// </summary>
+    public void DrawSolid(RoomGrid grid, int level, double time, bool cliff, int seedX, int seedY)
     {
-        Raylib.DrawCube(new Vector3(0, -0.5f, 0), RoomGrid.W, 1, RoomGrid.H, FloorColor);
+        if (cliff) DrawPlateauFloor(grid, seedX, seedY);
+        else
+        {
+            Raylib.DrawCube(new Vector3(0, -0.5f, 0), RoomGrid.W, 1, RoomGrid.H, FloorColor);
 
-        // closed (solid) regions are a little darker than the floor
+            // closed (solid) regions are a little darker than the floor
+            for (int y = 0; y < RoomGrid.H; y++)
+                for (int x = 0; x < RoomGrid.W;)
+                {
+                    if (grid.KindAt(x, y) != RoomGrid.Thick) { x++; continue; }
+                    int x0 = x; while (x < RoomGrid.W && grid.KindAt(x, y) == RoomGrid.Thick) x++;
+                    Raylib.DrawCube(P((x0 + x) / 2f, y + 0.5f, 0.01f), x - x0, 0.02f, 1f, ClosedColor);
+                }
+        }
+
+        DrawPosts(grid, level, time);
+    }
+
+    /// <summary>Isometric floor: merged runs of the reachable mask at the top of the slab.</summary>
+    private static void DrawPlateauFloor(RoomGrid grid, int seedX, int seedY)
+    {
+        var mask = RoomFloor.Mask(grid, seedX, seedY);
         for (int y = 0; y < RoomGrid.H; y++)
             for (int x = 0; x < RoomGrid.W;)
             {
-                if (grid.KindAt(x, y) != RoomGrid.Thick) { x++; continue; }
-                int x0 = x; while (x < RoomGrid.W && grid.KindAt(x, y) == RoomGrid.Thick) x++;
-                Raylib.DrawCube(P((x0 + x) / 2f, y + 0.5f, 0.01f), x - x0, 0.02f, 1f, ClosedColor);
+                if (!mask[x, y]) { x++; continue; }
+                int x0 = x;
+                while (x < RoomGrid.W && mask[x, y]) x++;
+                Raylib.DrawCube(P((x0 + x) / 2f, y + 0.5f, -0.15f), x - x0, 0.30f, 1f, FloorColor);
             }
+    }
 
-        DrawPosts(grid, level, time);
+    /// <summary>
+    /// Vertical sides of the plateau. Drawn in the unlit pass (after <c>LightingShader.End</c>) so all faces keep
+    /// the same flat colour: the light would otherwise shade the narrow face of a convex corner as a dark groove.
+    /// </summary>
+    public void DrawPlateauSides(RoomGrid grid, int seedX, int seedY)
+    {
+        var mask = RoomFloor.Mask(grid, seedX, seedY);
+        var corners = new HashSet<(int X, int Y)>();
+        foreach (var e in RoomFloor.MergedBoundary(mask))
+        {
+            var a = P(e.X0, e.Y0, 0f);
+            var b = P(e.X1, e.Y1, 0f);
+            float sx = MathF.Abs(b.X - a.X), sz = MathF.Abs(b.Z - a.Z);
+            var mid = new Vector3((a.X + b.X) / 2f, -CliffDepth / 2f, (a.Z + b.Z) / 2f);
+            if (sx > sz) CliffWall(mid, sx, 0.08f, shadeSouth: true);
+            else CliffWall(mid, 0.08f, sz, shadeSouth: false);
+            corners.Add((e.X0, e.Y0));
+            corners.Add((e.X1, e.Y1));
+        }
+
+        // Flush corner cubes: the wall runs end at the vertex, so the end faces would leave a small outside notch.
+        foreach (var (x, y) in corners)
+        {
+            var at = P(x, y, 0f);
+            Raylib.DrawCube(new Vector3(at.X, -CliffDepth / 2f, at.Z), 0.082f, CliffDepth, 0.082f, CliffColor);
+            Raylib.DrawCube(new Vector3(at.X, 0.02f, at.Z), 0.124f, 0.04f, 0.124f, CliffLip);
+        }
+
+        // A wide column under every generator post: the posts stand on the plateau corners, and the column fills
+        // the notch that the thin wall return left in the corner.
+        foreach (var (px, py) in grid.Walls.Posts)
+        {
+            var c = P(px, py, 0f);
+            Raylib.DrawCube(new Vector3(c.X, -CliffDepth / 2f, c.Z), 1.02f, CliffDepth, 1.02f, CliffColor);
+        }
+    }
+
+    /// <summary>
+    /// One side of the plateau: the cube plus a thin coat on the face that looks toward the camera from the lower
+    /// left (the south face of an x-running wall). Horizontal walls run bottom-left to top-right on screen and get
+    /// the darker coat; vertical walls keep the base colour. This replaces directional lighting with two flat tones.
+    /// </summary>
+    private static void CliffWall(Vector3 at, float sx, float sz, bool shadeSouth)
+    {
+        Raylib.DrawCube(at, sx, CliffDepth, sz, CliffColor);
+        if (shadeSouth) Raylib.DrawCube(new Vector3(at.X, at.Y, at.Z + 0.041f), sx, CliffDepth, 0.006f, CliffShade);
+        Raylib.DrawCube(new Vector3(at.X, 0.02f, at.Z), sx + 0.04f, 0.04f, sz + 0.04f, CliffLip);
     }
 
     /// <summary>Opaque generator posts; also drawn into the shadow map as casters.</summary>

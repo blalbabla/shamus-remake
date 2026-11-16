@@ -29,7 +29,7 @@ Shadow, процедурные лабиринты. Вид сверху или и
 git clone https://github.com/blalbabla/shamus-remake.git
 cd shamus-remake
 dotnet build          # решение Shamus.sln
-dotnet test           # 71 тест ядра
+dotnet test           # 79 тестов ядра
 dotnet run --project src/Shamus.Game
 ```
 
@@ -71,6 +71,7 @@ src/Shamus.Core/                 логика без Raylib (~1.4k строк)
   Mazes/MazeData.cs              640 байт, 128 комнат
   Mazes/RoomGrid.cs              сетка комнаты 40x22 (Thick/Thin)
   Mazes/RoomWalls.cs             отрезки стен + столбики-генераторы
+  Mazes/RoomFloor.cs             доступная зона (BFS от героя) + контур плиты для изометрии
   Mazes/ProceduralMaze.cs        генератор
   Mazes/MazeValidator.cs         проверки структуры/проходимости
   Mazes/MapLayout.cs             карта по уровням
@@ -78,7 +79,7 @@ src/Shamus.Game/                 Raylib-фронтенд (~2.6k строк)
   GameApp.cs                     окно, состояния, letterbox, меню, настройки, отладочные флаги
   Program.cs                     вход
   Rendering/SceneRenderer.cs     3D-сцена: пол, объекты, танк, враги, снаряды, эффекты, glow-эмиссия
-  Rendering/RoomView.cs          пол/закрытые зоны, столбики, силовые поля, название комнаты
+  Rendering/RoomView.cs          пол/закрытые зоны, плита-плато в изометрии, столбики, силовые поля, название комнаты
   Rendering/CameraRig.cs         ортокамера top/iso + кастомная 16:9 проекция
   Rendering/LightingShader.cs    Lambert + ambient + PCF-тени 5x5
   Rendering/ShadowMap.cs         depth-FBO 2048, ортокамера света
@@ -91,7 +92,7 @@ src/Shamus.Game/                 Raylib-фронтенд (~2.6k строк)
   Audio/                         Dsp, ProceduralSfx, AmbientSynth, AudioManager
 tools/Shamus.MazeExtract/        ATR -> .maze
 tools/Shamus.RoomCompare/        сверка RoomGrid со скриншотами
-tests/Shamus.Core.Tests/         xUnit, 71 тест
+tests/Shamus.Core.Tests/         xUnit, 79 тестов
 assets/                          mazes/*.maze, maps/*.map, config.json, fonts
 docs/                            DESIGN.md, TECHNICAL.md, MAZE_FORMAT.md, этот файл
 artifacts/                       исходники и скриншоты; в .gitignore, на новой машине отсутствует
@@ -117,7 +118,8 @@ artifacts/                       исходники и скриншоты; в .g
   (рендер в родном разрешении окна/дисплея, MSAA 4x); стены — вертикальные полупрозрачные розовые
   силовые поля; столбики-генераторы; направленный свет с тенями (2048, PCF 5x5); свечение (glow)
   силовых полей, «шапок» генераторов, барьеров pod-комнат, снарядов и эффектов. Высоты всего, что
-  стоит в комнате, согласованы через `RoomMetrics`.
+  стоит в комнате, согласованы через `RoomMetrics`. В изометрии комната — плита-плато по доступной зоне
+  (chamber — толстый «+», коридор — проход), стены по контуру, снаружи обрыв.
 - **UI:** титульный экран (только меню), SETTINGS (Gameplay/Video/Audio), пауза, Game Over, карта,
   HUD, тосты, рекорды по лабиринтам.
 - **Ввод:** клавиатура и геймпад (`Ui/GameInput.cs`): левый стик/D-pad — движение и меню, A —
@@ -125,7 +127,7 @@ artifacts/                       исходники и скриншоты; в .g
   параллельно и в изометрии двигает по осям комнаты, как до геймпада.
 - **Звук:** 18 процедурных эффектов (2–5 вариантов), живой эмбиент, отдельные громкости эффектов/музыки.
   (Переработка звука под новые события — ещё впереди.)
-- **Инструменты/тесты:** извлечение карт из ATR, сверка комнат со скриншотами, 71 xUnit-тест.
+- **Инструменты/тесты:** извлечение карт из ATR, сверка комнат со скриншотами, 79 xUnit-тестов.
 
 ## 5. Как устроен кадр (важно при правках рендера)
 
@@ -213,6 +215,20 @@ FBO только эмиттеры (без теста глубины: сравн�
 - Снаряды врагов приведены к тому же масштабу: плазменный шарик 0.085 с ядром 0.045, свой след из
   угольков, вспышка у стрелка на каждый свежий болт.
 
+**Плита в изометрии**
+
+- `RoomFloor.Mask` строит доступную зону: BFS от клетки игрока по `Empty` + одно кольцо соседних
+  `Thin`/`Thick`-клеток + клетки под всеми генераторами, чтобы посты стояли на плите и не висели.
+  `RoomFloor.MergedBoundary` отдаёт осевые рёбра, склеенные в длинные сегменты (без посеточных швов на стенах).
+- `RoomView.DrawPlateauFloor` рисует пол merged-runs по маске; `DrawPlateauSides` — стену на каждом ребре и
+  угловой куб в каждой вершине. Боковины идут в **нелит-проходе** двумя плоскими тонами: южные грани
+  (снизу-слева вверх-вправо на экране) — тёмным `CliffShade`, западные — базовым `CliffColor`; угловые кубы —
+  базовым цветом, без тёмной накладки; под каждым генератором — колонна 1.02 × depth базового цвета, на ней
+  стоит пост. Освещение
+  и тени на них не считаются, поэтому нет затенённой возвратной грани и ложных «выемок». Chamber — толстый
+  «+», коридор — форма прохода; снаружи обрыв.
+- Плита включается при `Rig.IsometricBlend > 0.5`; верхний вид не меняется.
+
 **Предметы**
 
 - `SceneRenderer.DrawItem` и четыре модели: `KeyModel` (кольцо-головка, стержень, бородка), `KeyholeModel`
@@ -299,6 +315,7 @@ FBO только эмиттеры (без теста глубины: сравн�
 | Снаряды | `SceneRenderer.DrawShells/DrawEnemyShells`, `GameConfig.MuzzleLength`, `RoomMetrics.BarrelY` |
 | Эффекты | `Rendering/ParticleFx.cs`, `SceneRenderer.OnEvents/UpdateEffects` |
 | Модели предметов | `SceneRenderer.DrawItem` + `KeyModel/KeyholeModel/PlusModel/QuestionModel`; высоты в `RoomMetrics` |
+| Плита в изометрии | `RoomFloor.Mask/MergedBoundary`, `RoomView.DrawPlateauFloor/DrawPlateauSides`; `SceneRenderer` передаёт клетку игрока |
 | Ввод (клавиатура/геймпад), экранные направления | `Ui/GameInput.cs`, `CameraRig.ScreenToRoom`, `GameApp.Update` |
 | Внешний вид стен | `RoomView`: `FieldPink`, `FieldHeight`, `FieldThickness`, `FieldAlpha` |
 | Столбики-генераторы | `RoomView.DrawPosts`, `PostBody/Top` |
@@ -319,7 +336,7 @@ dotnet build Shamus.sln
 dotnet test Shamus.sln --no-build
 ```
 
-Ожидаемо: 0 ошибок, 0 предупреждений, 71/71 тест. Для визуальной проверки:
+Ожидаемо: 0 ошибок, 0 предупреждений, 79/79 тестов. Для визуальной проверки:
 
 ```bash
 dotnet run --project src/Shamus.Game -- --maze c64 --room 3 --view iso --mute --shot shot.png
