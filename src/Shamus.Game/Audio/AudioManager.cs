@@ -106,7 +106,7 @@ public sealed class AudioManager : IDisposable
                 case WorldEventKind.PlayerDied: Play(Sfx.PlayerDie); break;
                 case WorldEventKind.GameOver: Play(Sfx.GameOver); break;
                 case WorldEventKind.KeyPicked: Play(Sfx.Key); break;
-                case WorldEventKind.DoorOpened: Play(Sfx.Door); break;
+                case WorldEventKind.DoorOpened: Play(Sfx.Keyhole); break;
                 case WorldEventKind.PotionPicked: Play(Sfx.Potion); break;
                 case WorldEventKind.BonusPicked: Play(Sfx.Bonus); break;
                 case WorldEventKind.PodOpened: Play(Sfx.PodOpen); break;

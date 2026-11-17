@@ -22,6 +22,21 @@ public sealed class RoomGrid
 
     public bool IsSolid(int x, int y) => x < 0 || y < 0 || x >= W || y >= H || _kind[x, y] != Empty;
 
+    /// <summary>
+    /// True when every cell touched by the axis-aligned square of half-size <paramref name="r"/> is open. Checking
+    /// all cells (not just the four corners) matters for large clearances: a 1-cell wall can overlap the middle of
+    /// an edge without containing a corner, which used to let enemies spawn inside a wall.
+    /// </summary>
+    public bool IsAreaFree(float cx, float cy, float r)
+    {
+        int x0 = (int)MathF.Floor(cx - r), x1 = (int)MathF.Floor(cx + r);
+        int y0 = (int)MathF.Floor(cy - r), y1 = (int)MathF.Floor(cy + r);
+        for (int y = y0; y <= y1; y++)
+            for (int x = x0; x <= x1; x++)
+                if (IsSolid(x, y)) return false;
+        return true;
+    }
+
     /// <summary>Cell kind (Empty, Thick, Thin); cells outside the room count as Thick.</summary>
     public byte KindAt(int x, int y) => x < 0 || y < 0 || x >= W || y >= H ? Thick : _kind[x, y];
 

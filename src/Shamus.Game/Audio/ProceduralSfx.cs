@@ -1,6 +1,6 @@
 namespace Shamus.Game.Audio;
 
-public enum Sfx { Shot, HitWall, HitBarrier, BulletsClash, EnemyShot, EnemyDie, PlayerDie, GameOver, Key, Door, Potion, Bonus, PodOpen, ShadowWarn, ShadowAppear, ShadowDie, RoomEnter, NewLoop }
+public enum Sfx { Shot, HitWall, HitBarrier, BulletsClash, EnemyShot, EnemyDie, PlayerDie, GameOver, Key, Door, Potion, Bonus, PodOpen, ShadowWarn, ShadowAppear, ShadowDie, RoomEnter, NewLoop, Keyhole }
 
 /// <summary>All sounds are synthesised: one deterministic generator per effect, seeded by the variant index.</summary>
 public static class ProceduralSfx
@@ -100,6 +100,13 @@ public static class ProceduralSfx
             case Sfx.RoomEnter:
                 b = Dsp.Buf(0.12f);
                 Dsp.AddSweep(b, 0, 0.1f, 420 * j(0.1f), 520 * j(0.1f), 0.18f, 22);
+                break;
+            case Sfx.Keyhole:
+                b = Dsp.Buf(1.1f);
+                Dsp.AddSweep(b, 0f, 0.9f, 95 * j(0.05f), 48, 0.7f, 2.2f, 2, 9);   // the energy wall gives way
+                Dsp.AddNoise(b, rng, 0f, 0.7f, 250, 2600, 0.4f, 3);                 // crackle of the field
+                Dsp.AddBell(b, 0.12f, 1320 * j(0.04f), 0.22f, 8);                   // key turns
+                Dsp.AddBell(b, 0.30f, 990 * j(0.04f), 0.18f, 10);
                 break;
             default: // NewLoop fanfare
                 b = Dsp.Buf(1.8f);

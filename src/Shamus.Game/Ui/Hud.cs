@@ -31,7 +31,6 @@ public sealed class Hud
                 case WorldEventKind.DoorOpened: Toast("DOOR OPENED", Color.SkyBlue); break;
                 case WorldEventKind.PotionPicked: Toast("EXTRA LIFE", Color.Lime); break;
                 case WorldEventKind.BonusPicked: Toast($"BONUS +{e.Value}", Color.Violet); break;
-                case WorldEventKind.RoomCleared: Toast("ROOM CLEARED  - FASTER!", Color.Gold); break;
                 case WorldEventKind.PodOpened: Toast("POD OPEN", Color.Orange); break;
                 case WorldEventKind.CycleStarted: Toast($"LOOP {e.Value + 1}  - ENEMIES FASTER", Color.Red); break;
             }

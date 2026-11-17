@@ -121,6 +121,7 @@ public sealed class GameWorld
             DoorSide = Maze.DoorOnLeft(Room) ? -1 : 1;
             DoorClosed = !_unlocked.Contains(Room);
             if (DoorClosed) SetDoor(true);
+            if (!DoorClosed) return;   // the door is already open: the keyhole is gone
         }
         else if (_taken.Contains(Room)) return;
         // random one of the 9 positions of the '#' grid, in a random order until a free one is found
@@ -169,18 +170,14 @@ public sealed class GameWorld
                 {
                     DoorClosed = false; _unlocked.Add(Room); SetDoor(false);
                     Events.Add(new WorldEvent(WorldEventKind.DoorOpened, Obj.X, Obj.Y, Obj.KeyId));
+                    Obj = null;   // the keyhole is used up together with the key
                 }
                 break;
         }
     }
 
-    private bool OpenArea(float x, float y, float r)
-    {
-        for (int sx = -1; sx <= 1; sx += 2)
-            for (int sy = -1; sy <= 1; sy += 2)
-                if (Grid.IsSolid((int)MathF.Floor(x + sx * r), (int)MathF.Floor(y + sy * r))) return false;
-        return true;
-    }
+    /// <summary>True when the whole square of radius <paramref name="r"/> is on open cells (no wall under it).</summary>
+    private bool OpenArea(float x, float y, float r) => Grid.IsAreaFree(x, y, r);
 
     private void SpawnEnemies()
     {
@@ -192,12 +189,13 @@ public sealed class GameWorld
         int count = _rng.Next(Config.EnemyCountMin[Math.Min(lv, Config.EnemyCountMin.Length - 1)], Config.EnemyCountMax[lv] + 1);
         int guard = 0;
         float minDist = Config.MinSpawnDistance;
+        float clearance = MathF.Max(0.7f, Config.EnemyRadius + 0.2f);   // whole body, not just its four corners
         while (Enemies.Count < count && guard < 1500)
         {
             guard++;
             if (guard % 150 == 0) minDist = Math.Max(6f, minDist - 1.5f);   // crowded room: relax gradually, never below 6 cells
             float x = 1 + (float)_rng.NextDouble() * (RoomGrid.W - 2), y = 1 + (float)_rng.NextDouble() * (RoomGrid.H - 2);
-            if (!OpenArea(x, y, 0.7f)) continue;
+            if (!OpenArea(x, y, clearance)) continue;
             float pdx = x - PlayerX, pdy = y - PlayerY;
             if (pdx * pdx + pdy * pdy < minDist * minDist) continue;
             if (Enemies.Any(o => (o.X - x) * (o.X - x) + (o.Y - y) * (o.Y - y) < 4f)) continue; // keep enemies apart

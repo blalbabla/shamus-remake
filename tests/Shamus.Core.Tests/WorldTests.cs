@@ -258,6 +258,7 @@ public class ObjectTests
         w.Tick(new InputState(0, 0, false));
         Assert.False(w.DoorClosed);
         Assert.Empty(w.Keys);
+        Assert.Null(w.Obj);   // the keyhole disappears when the door opens
     }
 
     [Fact]
