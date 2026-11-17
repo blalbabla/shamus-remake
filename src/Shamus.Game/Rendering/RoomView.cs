@@ -15,8 +15,8 @@ public sealed class RoomView : IDisposable
     {
         new(255, 70, 25, 255), new(70, 130, 255, 255), new(70, 255, 110, 255), new(255, 60, 70, 255),
     };
-    private static readonly Color FloorColor = new(34, 36, 46, 255), ClosedColor = new(18, 18, 26, 255);
-    private static readonly Color CliffColor = new(48, 58, 88, 255), CliffShade = new(30, 36, 56, 255), CliffLip = new(95, 118, 170, 255);
+    private static readonly Color FloorColor = new(34, 36, 46, 255), ClosedColor = new(18, 18, 26, 255), PlateEdge = new(46, 51, 64, 255);
+    private static readonly Color CliffColor = new(48, 58, 88, 255), CliffShade = new(30, 36, 56, 255), CliffVein = new(39, 47, 72, 255), CliffVeinShade = new(24, 30, 46, 255), CliffLip = new(95, 118, 170, 255);
     private const float CliffDepth = 24f;
     private static readonly Color PostBody = new(46, 88, 235, 255), PostTop = new(110, 160, 255, 255);
     // the electrified walls are pink force fields
@@ -121,24 +121,59 @@ public sealed class RoomView : IDisposable
                 while (x < RoomGrid.W && mask[x, y]) x++;
                 Raylib.DrawCube(P((x0 + x) / 2f, y + 0.5f, -0.15f), x - x0, 0.30f, 1f, FloorColor);
             }
+
+        // Dark metal deck plates: 2x2 tiles where the mask allows, 1x1 along irregular edges.
+        var covered = new bool[RoomGrid.W, RoomGrid.H];
+        for (int y = 0; y + 1 < RoomGrid.H; y += 2)
+            for (int x = 0; x + 1 < RoomGrid.W; x += 2)
+            {
+                if (!mask[x, y] || !mask[x + 1, y] || !mask[x, y + 1] || !mask[x + 1, y + 1]) continue;
+                DrawPlate(P(x + 1f, y + 1f, 0f), 1.94f, x, y);
+                covered[x, y] = covered[x + 1, y] = covered[x, y + 1] = covered[x + 1, y + 1] = true;
+            }
+        for (int y = 0; y < RoomGrid.H; y++)
+            for (int x = 0; x < RoomGrid.W; x++)
+            {
+                if (!mask[x, y] || covered[x, y]) continue;
+                DrawPlate(P(x + 0.5f, y + 0.5f, 0f), 0.94f, x, y);
+            }
+    }
+
+    /// <summary>A dark deck plate with a chamfered edge; the hash varies the top shade per tile.</summary>
+    private static void DrawPlate(Vector3 c, float size, int x, int y)
+    {
+        int h = (x * 73856093) ^ (y * 19349663);
+        int v = (h & 7) - 3;
+        var plate = new Color((byte)(38 + v), (byte)(42 + v), (byte)(52 + v), (byte)255);
+        Raylib.DrawCube(new Vector3(c.X, 0.0008f, c.Z), size, 0.0016f, size, PlateEdge);
+        Raylib.DrawCube(new Vector3(c.X, 0.0024f, c.Z), size - 0.08f, 0.0016f, size - 0.08f, plate);
     }
 
     /// <summary>
     /// Vertical sides of the plateau. Drawn in the unlit pass (after <c>LightingShader.End</c>) so all faces keep
     /// the same flat colour: the light would otherwise shade the narrow face of a convex corner as a dark groove.
     /// </summary>
-    public void DrawPlateauSides(RoomGrid grid, int seedX, int seedY)
+    public void DrawPlateauSides(RoomGrid grid, int seedX, int seedY, int room)
     {
         var mask = RoomFloor.Mask(grid, seedX, seedY);
         var corners = new HashSet<(int X, int Y)>();
+        var rng = new Random(room * 7919 + 17);   // the same room gets the same veins every frame
         foreach (var e in RoomFloor.MergedBoundary(mask))
         {
             var a = P(e.X0, e.Y0, 0f);
             var b = P(e.X1, e.Y1, 0f);
             float sx = MathF.Abs(b.X - a.X), sz = MathF.Abs(b.Z - a.Z);
             var mid = new Vector3((a.X + b.X) / 2f, -CliffDepth / 2f, (a.Z + b.Z) / 2f);
-            if (sx > sz) CliffWall(mid, sx, 0.08f, shadeSouth: true);
-            else CliffWall(mid, 0.08f, sz, shadeSouth: false);
+            if (sx > sz)
+            {
+                CliffWall(mid, sx, 0.08f, shadeSouth: true);
+                Veins(mid, sx, horizontal: true, rng);
+            }
+            else
+            {
+                CliffWall(mid, 0.08f, sz, shadeSouth: false);
+                Veins(mid, sz, horizontal: false, rng);
+            }
             corners.Add((e.X0, e.Y0));
             corners.Add((e.X1, e.Y1));
         }
@@ -157,6 +192,28 @@ public sealed class RoomView : IDisposable
         {
             var c = P(px, py, 0f);
             Raylib.DrawCube(new Vector3(c.X, -CliffDepth / 2f, c.Z), 1.02f, CliffDepth, 1.02f, CliffColor);
+        }
+    }
+
+    /// <summary>
+    /// Dark vertical strata on the visible wall face, like cracks in a cliff. Positions and lengths come from a
+    /// per-room RNG, so the pattern is stable while the room is on screen.
+    /// </summary>
+    private static void Veins(Vector3 at, float length, bool horizontal, Random rng)
+    {
+        int count = Math.Max(1, (int)(length / 1.4f));
+        for (int i = 0; i < count; i++)
+        {
+            float width = 0.035f + rng.NextSingle() * 0.09f;
+            float height = CliffDepth * (0.25f + rng.NextSingle() * 0.7f);
+            float top = -rng.NextSingle() * 1.8f;                 // some stripes start below the rim
+            float midY = top - height / 2f;
+            float along = (rng.NextSingle() - 0.5f) * (length - width - 0.06f);
+            var vein = horizontal ? CliffVeinShade : CliffVein;   // keep a little contrast on both wall tones
+            if (horizontal)
+                Raylib.DrawCube(new Vector3(at.X + along, midY, at.Z + 0.046f), width, height, 0.005f, vein);
+            else
+                Raylib.DrawCube(new Vector3(at.X - 0.046f, midY, at.Z + along), 0.005f, height, width, vein);
         }
     }
 

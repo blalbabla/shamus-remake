@@ -169,7 +169,7 @@ public sealed class SceneRenderer : IDisposable
 
         // Plateau sides are unlit: a flat colour leaves no shaded return face in the convex corners.
         if (Rig.IsometricBlend > 0.5f)
-            _room.DrawPlateauSides(world.Grid, (int)MathF.Floor(world.PlayerX), (int)MathF.Floor(world.PlayerY));
+            _room.DrawPlateauSides(world.Grid, (int)MathF.Floor(world.PlayerX), (int)MathF.Floor(world.PlayerY), world.Room);
 
         // Unlit: shells, effects, floor title, pod barriers and the translucent force-field walls.
         DrawShells(world);
