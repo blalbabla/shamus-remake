@@ -1,96 +1,96 @@
-# Формат лабиринтов, геометрия комнат, карта и генератор
+# Maze format, room geometry, map, and generator
 
-Источник формата: «New Mazes for Shamus» (slx, 2017), расширенный Atari-формат.
+Format source: "New Mazes for Shamus" (slx, 2017), an extended Atari format.
 
-## 1. Файл `.maze`: 640 байт
+## 1. The `.maze` file: 640 bytes
 
-Пять сегментов по 128 байт; индекс байта внутри сегмента равен номеру комнаты (0..127).
+Five segments of 128 bytes each; the byte index within a segment equals the room number (0..127).
 
-| Сегмент | Смещение | Содержимое |
+| Segment | Offset | Contents |
 |---|---|---|
-| 0 | 0 | горизонтальные стены; бит 7 = коридор, биты 4–6 = тип коридора |
-| 1 | 128 | вертикальные стены; для коридоров младшие 7 бит = номер комнаты, куда ведёт вертикальный выход |
-| 2 | 256 | объект: 0 нет, 1 скважина, 2 ключ, 3 «?», 4 зелье, 6 Shadow |
-| 3 | 384 | цвет объекта: младший полубайт = оттенок Atari, биты 5–7 = яркость, бит 4 = какая дверь закрыта (1 = левая, 0 = правая) |
-| 4 | 512 | байт 0 = число pod-комнат, байты 1.. = их номера; байты `0x7D..0x7F` = последние комнаты уровней 1–3 |
+| 0 | 0 | horizontal walls; bit 7 = corridor, bits 4–6 = corridor type |
+| 1 | 128 | vertical walls; for corridors the low 7 bits = number of the room the vertical exit leads to |
+| 2 | 256 | object: 0 none, 1 keyhole, 2 key, 3 "?", 4 potion, 6 Shadow |
+| 3 | 384 | object color: low nibble = Atari hue, bits 5–7 = brightness, bit 4 = which door is closed (1 = left, 0 = right) |
+| 4 | 512 | byte 0 = number of pod rooms, bytes 1.. = their numbers; bytes `0x7D..0x7F` = the last rooms of levels 1–3 |
 
-Идентификатор ключа: байт цвета без бита 4 (`MazeData.KeyId`); ключ и скважина одного цвета подходят друг к другу.
+Key identifier: the color byte without bit 4 (`MazeData.KeyId`); a key and a keyhole of the same color match each other.
 
-### Сетка `#` (chamber)
+### The `#` grid (chamber)
 
-Шесть горизонтальных кусков стен (биты 0–2 верхняя линия слева направо, 3–5 нижняя) и шесть вертикальных (биты 0–2 левая линия
-сверху вниз, 3–5 правая). Pod-комната это chamber без внутренних стен. Объект при входе ставится случайно в одну из 9 ячеек сетки.
+Six horizontal wall pieces (bits 0–2 top line left to right, 3–5 bottom) and six vertical ones (bits 0–2 left line
+top to bottom, 3–5 right). A pod room is a chamber without internal walls. An object at entry is placed randomly in one of the 9 grid cells.
 
-### Типы коридоров (биты 4–6 сегмента 0)
+### Corridor types (bits 4–6 of segment 0)
 
-| Тип | Код | Выходы |
+| Type | Code | Exits |
 |---|---|---|
-| 0 | `$80` | только вертикальный вниз (тупик) |
-| 1 | `$90` | вниз и вправо |
-| 2 | `$A0` | вниз и влево |
-| 3 | `$B0` | T: влево, вправо, вниз |
-| 4 | `$C0` | только вертикальный вверх (тупик) |
-| 5 | `$D0` | вверх и вправо |
-| 6 | `$E0` | вверх и влево |
-| 7 | `$F0` | T: влево, вправо, вверх |
+| 0 | `$80` | vertical down only (dead end) |
+| 1 | `$90` | down and right |
+| 2 | `$A0` | down and left |
+| 3 | `$B0` | T: left, right, down |
+| 4 | `$C0` | vertical up only (dead end) |
+| 5 | `$D0` | up and right |
+| 6 | `$E0` | up and left |
+| 7 | `$F0` | T: left, right, up |
 
-Формы 0 и 4 в игре понимаются как «только вертикаль»; точные формы проверены по скриншотам лишь частично.
+Shapes 0 and 4 are understood in the game as "vertical only"; the exact shapes have only partially been verified against screenshots.
 
-## 2. Правила связности
+## 2. Connectivity rules
 
-- Правый выход комнаты r открыт тогда и только тогда, когда открыт левый выход комнаты r+1 (кроме краёв лабиринта).
-- У коридора вертикальный выход ведёт в комнату-коридор противоположного направления, причём связь взаимная.
-- Объекты ставятся в chambers и pod-комнатах; у каждой pod-комнаты должна быть цель; комната 127 содержит Shadow и является pod-комнатой.
-- Это проверяет `MazeValidator.Validate`.
+- The right exit of room r is open if and only if the left exit of room r+1 is open (except at the maze edges).
+- For a corridor, the vertical exit leads to a corridor room of the opposite direction, and the connection is mutual.
+- Objects are placed in chambers and pod rooms; every pod room must have a goal; room 127 contains Shadow and is a pod room.
+- This is checked by `MazeValidator.Validate`.
 
-## 3. Геометрия комнаты (`RoomGrid`)
+## 3. Room geometry (`RoomGrid`)
 
-Сетка 40 x 22 клетки (одна клетка около 8 пикселей оригинала).
+A 40 x 22 cell grid (one cell is about 8 pixels of the original).
 
-- **Chamber:** четыре «обойных» угловых блока (колонки 0–8 и 32–39, строки 0–7 и 14–21), центральная колонка 9–31 с верхней и нижней стеной,
-  средняя полоса строк 8–13 открыта до краёв экрана (двери влево и вправо). Внутри сетка `#`: вертикальные линии в колонках 16 и 23,
-  горизонтальные в строках 7 и 14.
-- **Corridor:** вся комната твёрдая, вырезается проход: центр (колонки 17–23, строки 8–13) есть всегда, плюс ветви по типу.
-- Геометрия сверена скриншотами C64-версии (`tools/Shamus.RoomCompare`): средняя разница около 7%, остальное приходится на pod-барьеры и толщину стен.
+- **Chamber:** four "wallpaper" corner blocks (columns 0–8 and 32–39, rows 0–7 and 14–21), a central column 9–31 with a top and bottom wall,
+  and the middle band of rows 8–13 open to the screen edges (doors left and right). Inside is the `#` grid: vertical lines in columns 16 and 23,
+  horizontal ones in rows 7 and 14.
+- **Corridor:** the whole room is solid and a passage is carved out: the center (columns 17–23, rows 8–13) is always present, plus branches by type.
+- The geometry was compared against C64 version screenshots (`tools/Shamus.RoomCompare`): the average difference is about 7%, the rest is accounted for by pod barriers and wall thickness.
 
-### Векторная геометрия стен
+### Vector wall geometry
 
-Для рисования сетка комнаты преобразуется в отрезки (`RoomWalls`). Клетки бывают `Thick` (угловые блоки chamber, заливка коридора) и `Thin`
-(рамка центральной колонки, куски сетки `#`, закрытые двери, запечатанные края комнат 0 и 127). У `Thick`-областей рисуется контур по границе
-с пустыми клетками, у серий `Thin`-клеток одна осевая линия; все линии идут по центрам клеток, в концах отрезков стоит по одному генератору. Тест проверяет, что у каждой границы
-«твёрдая / пустая клетка» есть отрезок стены рядом (для всех лабиринтов и 20 сгенерированных).
+For drawing, the room grid is converted into line segments (`RoomWalls`). Cells are either `Thick` (chamber corner blocks, corridor fill) or `Thin`
+(the central column frame, `#` grid pieces, closed doors, sealed edges of rooms 0 and 127). For `Thick` regions an outline is drawn along the border
+with empty cells, for runs of `Thin` cells a single center line; all lines run through cell centers, and one generator sits at each segment end. A test checks that every
+"solid / empty cell" border has a wall segment next to it (for all mazes and 20 generated ones).
 
-## 4. Файл карты `.map`
+## 4. The `.map` map file
 
-Текстовая схема, как `shamus_map_simplified.gif`. Блоки `level N`, в каждой строке токены через пробел:
+A text layout like `shamus_map_simplified.gif`. Blocks `level N`, with space-separated tokens on each line:
 
-| Токен | Значение |
+| Token | Meaning |
 |---|---|
-| `NNN` | комната (три цифры) |
-| `---` | растянутый горизонтальный переход |
-| `\|` | вертикальный переход |
-| `..` | пусто |
-| `toN` | выход на уровень N |
+| `NNN` | room (three digits) |
+| `---` | stretched horizontal transition |
+| `\|` | vertical transition |
+| `..` | empty |
+| `toN` | exit to level N |
 
-Строки начинаются с `#` для комментариев. `assets/maps/c64.map` переписана из gif; тест `HandMadeMapMatchesMazeData` сверяет её с данными
-(переходы r к r+1 лежат на одной строке, вертикальные связи в одной колонке и в нужную сторону). Если файла нет, `MapLayout.Auto` ставит каждую
-цепочку соединённых комнат отдельной строкой. На карте в игре видны посещённые комнаты и (приглушённо) соседние непосещённые, до которых ведёт открытый выход.
+Lines starting with `#` are comments. `assets/maps/c64.map` was transcribed from the gif; the `HandMadeMapMatchesMazeData` test verifies it against the data
+(transitions from r to r+1 lie on the same line, vertical connections in the same column and in the right direction). If the file is absent, `MapLayout.Auto` puts
+each chain of connected rooms on its own line. The in-game map shows visited rooms and, dimmed, adjacent unvisited rooms reachable through an open exit.
 
-## 5. Генератор (`ProceduralMaze.Generate(seed)`)
+## 5. The generator (`ProceduralMaze.Generate(seed)`)
 
-Результат воспроизводим: тот же seed даёт тот же лабиринт.
+The result is reproducible: the same seed yields the same maze.
 
-1. **Цепочки.** 128 комнат делятся на цепочки длиной 1..10 (первая и последняя не короче 2). Первая комната цепочки угловой коридор (кроме
-   комнаты 0), последняя тоже; промежуточные: chambers, часть pod-комнат (всего 7), часть T-развилок (около 12%). Комната 127 это pod.
-2. **Уровни.** Границы выбираются около 36/65/92 внутри цепочек (чтобы уровни были связаны).
-3. **Вертикали.** «Слоты» (углы, T, одиночные комнаты) группируются по уровню и парами сшиваются; для каждой пары случайно выбирается, какая сторона
-   смотрит вниз; типы коридоров следуют из ролей и направлений. Нечётное число слотов исправляется добавлением T-развилки.
-4. **Стены.** В chambers бросаются случайные куски сетки `#`; вариант принимается, если комната остаётся проходимой (`MazeValidator.RoomPlayable`).
-5. **Замки.** До 7 скважин в случайных chambers (цвета из палитры: синий, оранжевый, красный, фиолетовый, зелёный, голубой, коричневый; сторона двери случайна).
-6. **Ключи.** Для каждого замка в порядке достижимости ключ кладётся только туда, куда игрок может дойти до открытия этого замка (`MazeValidator.Reachable`);
-   недостижимые замки удаляются; нужно не меньше четырёх рабочих замков.
-7. **Прочее.** Зелья (7) и «?» (8) в свободных chambers; цели pod-комнат случайно зелье или «?».
-8. **Проверка.** `MazeValidator.Validate`: связность выходов, взаимность вертикалей, цели pod, проходимость каждой комнаты, проходимость лабиринта
-   «жадным» сбором ключей. Неудачные варианты отбрасываются (до 400 попыток).
+1. **Chains.** The 128 rooms are split into chains of length 1..10 (the first and last are at least 2 long). The first room of a chain is a corner corridor (except
+   room 0), and so is the last; the intermediate ones are chambers, some pod rooms (7 in total), and some T junctions (about 12%). Room 127 is a pod.
+2. **Levels.** Boundaries are chosen near 36/65/92 inside the chains (so that the levels are connected).
+3. **Verticals.** "Slots" (corners, T junctions, single rooms) are grouped by level and stitched together in pairs; for each pair one side is chosen at random
+   to face down; corridor types follow from the roles and directions. An odd number of slots is fixed by adding a T junction.
+4. **Walls.** Random `#` grid pieces are thrown into chambers; a variant is accepted if the room remains passable (`MazeValidator.RoomPlayable`).
+5. **Locks.** Up to 7 keyholes in random chambers (colors from the palette: blue, orange, red, purple, green, cyan, brown; the door side is random).
+6. **Keys.** For each lock, in order of reachability, a key is placed only where the player can get to before opening that lock (`MazeValidator.Reachable`);
+   unreachable locks are removed; at least four working locks are required.
+7. **Misc.** Potions (7) and "?" (8) in free chambers; pod room goals are randomly a potion or a "?".
+8. **Validation.** `MazeValidator.Validate`: exit connectivity, mutual vertical links, pod goals, passability of every room, and maze passability
+   by "greedy" key collection. Failed variants are discarded (up to 400 attempts).
 
-Опции (`MazeGenOptions`): число замков, pod-комнат, зелий, бонусов. В меню лабиринт «PROCEDURAL» и строка SEED; из командной строки `--maze random --seed N`.
+Options (`MazeGenOptions`): number of locks, pod rooms, potions, bonuses. In the menu the maze is "PROCEDURAL" plus a SEED line; from the command line, `--maze random --seed N`.

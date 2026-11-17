@@ -1,172 +1,172 @@
-# Shamus 3D: дизайн-документ
+# Shamus 3D: Design Document
 
-## 1. Цели
+## 1. Goals
 
-- **Этап 1 (MVP, сделан):** повторить базовый геймплей Shamus максимально близко к оригиналу, но в 3D с камерой сверху.
-  Объекты состоят из 3D-примитивов, звуки генерируются процедурно.
-- **Дальше:** процедурная генерация лабиринтов (сделана в базовом виде), новые геймплейные фичи, улучшение графики.
+- **Stage 1 (MVP, done):** reproduce the core Shamus gameplay as closely as possible to the original, but in 3D with a top-down camera.
+  Objects are made of 3D primitives, sounds are generated procedurally.
+- **Next:** procedural maze generation (done in basic form), new gameplay features, better graphics.
 
-Принципы: сначала точность воспроизведения механик, потом расширения; логика отделена от отображения; всё
-настраивается числами из конфигурации.
+Principles: mechanics fidelity first, extensions later; logic is separated from rendering; everything
+is configured with numbers from the config.
 
-## 2. Игровой цикл
+## 2. Game Loop
 
-1. Титульный экран: выбор лабиринта, зерна (для процедурного), сложности, громкости, God mode.
-2. Игрок появляется в комнате 0 (или заданной) и проходит комнаты по порядку номеров и вертикальными переходами.
-3. Гибель: потеря жизни, возрождение на входе в комнату, враги в комнате генерируются заново. При нуле жизней Game Over.
-4. Победа в круге: Shadow в комнате 127 убит, начинается новый круг с комнаты 1 (сложнее).
+1. Title screen: maze selection, seed (for procedural), difficulty, volume, God mode.
+2. The player spawns in room 0 (or a given room) and goes through rooms in numeric order and via vertical transitions.
+3. Death: lose a life, respawn at the room entrance, enemies in the room are generated anew. At zero lives, Game Over.
+4. Winning a round: Shadow in room 127 is killed, a new round starts from room 1 (harder).
 
-## 3. Мир
+## 3. World
 
-- **128 комнат**, 4 уровня (чёрный, синий, зелёный, красный); границы уровней задаются картой (в оригинале 37, 66, 92).
-- Влево/вправо: комната с номером ±1. Вверх/вниз: только из коридоров, на связанную комнату.
-- Комнаты: **chamber** (широкая, с сеткой внутренних стен `#`), **corridor** (узкий проход, 8 форм), **pod room** (барьеры).
-- За пределы лабиринта выйти нельзя: у комнаты 0 слева и у комнаты 127 справа стоит смертельная стена.
-- Стены под напряжением: касание убивает игрока (в God mode только блокирует).
-- Карта (M) показывает комнаты, где игрок уже был, а также приглушённым тёмно-серым цветом не посещённые комнаты, до которых ведёт открытый выход посещённой комнаты (неисследованные выходы).
-- В изометрии комната — плита-плато: её верх повторяет доступную зону (chamber — толстый «+», коридор — форма прохода), по всему замкнутому контуру вниз идут тёмные вертикальные стены, снаружи — обрыв. Верхний вид не меняется.
+- **128 rooms**, 4 levels (black, blue, green, red); level boundaries are set by the map (37, 66, 92 in the original).
+- Left/right: the room with number ±1. Up/down: only from corridors, to the linked room.
+- Rooms: **chamber** (wide, with a grid of internal walls `#`), **corridor** (narrow passage, 8 shapes), **pod room** (barriers).
+- You cannot leave the maze: there is a deadly wall to the left of room 0 and to the right of room 127.
+- Electrified walls: by default, touching them only blocks (WALLS DON'T KILL is on); if the option is turned off, it kills. In God mode it also only blocks.
+- The map (M) shows the rooms the player has already visited, and also, in a muted dark gray, unvisited rooms reachable through an open exit of a visited room (unexplored exits).
+- In isometric view, a room is a slab plateau: its top follows the accessible area (chamber — a thick "+", corridor — the shape of the passage), dark vertical walls run down along the entire closed contour, and outside is a drop-off. The top view does not change.
 
-## 4. Игрок
+## 4. Player
 
-- Движение в 8 направлениях. Стик геймпада задаёт экранное направление, а `CameraRig.ScreenToRoom`
-  пересчитывает его в оси комнаты по текущей камере (в изометрии «вправо» — диагональ вниз по комнате,
-  «вправо-вверх» — прямо по оси X; сверху — обычные стороны). Клавиатура двигает по осям комнаты,
-  как до поддержки геймпада. Танк не переставляется боком: при нажатии нового направления он **сначала
-  разворачивается на месте** и только потом едет. Разворот: 45° ≈ 0.07 с, 90° ≈ 0.08 с, 180° ≈ 0.12 с. Если клавишу
-  отпустить сразу, танк всё равно довернётся — одно нажатие это поворот; если держать, он поедет сразу после доворота.
-- Выстрел не ждёт разворота: пуля уходит в нажатом направлении сразу.
-- До 3 пуль одновременно, пауза между выстрелами 8 тиков (60 Hz).
-- Скорость: 0.133 клетки за тик (около 8 клеток в секунду); после зачистки комнаты умножается на 1.25.
-- Стартовых жизней 5 (корректируется сложностью).
+- Movement in 8 directions. The gamepad stick sets the screen direction, and `CameraRig.ScreenToRoom`
+  converts it into room axes based on the current camera (in isometric view, "right" is a diagonal down the room,
+  "up-right" is straight along the X axis; in top view, the usual sides). The keyboard moves along room axes,
+  as before gamepad support. The tank does not strafe sideways: when a new direction is pressed, it **first
+  turns in place** and only then drives. Turning: 45° ≈ 0.07 s, 90° ≈ 0.08 s, 180° ≈ 0.12 s. If the key is
+  released immediately, the tank still completes the turn — one press is a turn; if held, it drives right after the turn completes.
+- Shooting does not wait for the turn: the bullet leaves in the pressed direction immediately.
+- Up to 3 bullets at a time, a pause of 8 ticks between shots (60 Hz).
+- Speed: 0.133 cells per tick (about 8 cells per second); after the room is cleared it is multiplied by 1.25.
+- Starting lives 5 (adjusted by difficulty).
 
-## 5. Враги
+## 5. Enemies
 
-Количество при входе случайно в диапазоне по уровню: 1–5, 2–7, 3–9, 4–11 (`EnemyCountMin/Max` в `config.json`). Враги появляются не ближе 14 клеток от игрока (если комната слишком тесная, расстояние плавно уменьшается, но не ниже 6) и не ближе 2 клеток друг к другу; место проверяется по всей площади тела, поэтому враг не может появиться в энергостене. Все три типа встречаются с первого уровня; прыгуны на первом уровне реже (примерно 2 из 11). Окрас каждого врага выбирается случайно из четырёх цветов (без зелёного) и ни на что не влияет — см. §10. Враги убиваются пулей игрока и
-не умирают от стен (они скользят вдоль них). Контакт с врагом или его пулей убивает игрока. Пули врагов убивают и других врагов, если те попадают под выстрел (очки игроку не начисляются); стрелявшего пуля не задевает. Пуля игрока уничтожает пулю врага.
+The count at entry is random within a level range: 1–5, 2–7, 3–9, 4–11 (`EnemyCountMin/Max` in `config.json`). Enemies spawn no closer than 14 cells to the player (if the room is too cramped, the distance smoothly decreases, but not below 6) and no closer than 2 cells to each other; the position is checked over the whole body area, so an enemy cannot spawn in an energy wall. All three types appear from the first level; jumpers are rarer on the first level (about 2 out of 11). The color of each enemy is chosen randomly from four colors (no green) and affects nothing — see §10. Enemies are killed by the player's bullet and
+do not die from walls (they slide along them). Contact with an enemy or its bullet kills the player. Enemy bullets also kill other enemies if they get caught in the shot (no points are awarded to the player); the shooter is not hit by its own bullet. The player's bullet destroys an enemy bullet.
 
-| Враг | Очки | Поведение | Стрельба |
+| Enemy | Points | Behavior | Shooting |
 |---|---|---|---|
-| Robo-Droid | 50 | медленный и методичный: 75% решений к игроку по главной оси, 15% по другой, 10% случайно | по прямой, когда стоит на одной линии с игроком |
-| Spiral Drone | 100 | хаотичные траектории: прямой курс, круг вокруг игрока, отход, дрейф, плюс покачивание | половина дронов не стреляет; стреляющие бьют веером из трёх пуль |
-| Snap Jumper (на первом уровне реже) | 150 | самый агрессивный: телепорт-прыжок примерно на 2 клетки раз в секунду прямо к игроку, иногда боком | не стреляет |
+| Robo-Droid | 50 | slow and methodical: 75% of decisions toward the player along the main axis, 15% along the other, 10% random | in a straight line when it is on the same line as the player |
+| Spiral Drone | 100 | chaotic trajectories: straight course, circling the player, retreat, drift, plus wobble | half of the drones do not shoot; those that shoot fire a fan of three bullets |
+| Snap Jumper (rarer on the first level) | 150 | the most aggressive: a teleport jump of about 2 cells once per second straight at the player, sometimes sideways | does not shoot |
 
-Скорость врагов растёт на 25% за уровень и на 20% за пройденный круг.
+Enemy speed grows by 25% per level and by 20% per completed round.
 
-## 6. Объекты
+## 6. Objects
 
-| Объект | Эффект |
+| Object | Effect |
 |---|---|
-| Ключ | попадает в инвентарь (цветной значок в HUD); подобранный ключ больше не появляется |
-| Скважина (keyhole) | одна дверь комнаты закрыта цветным блоком; касание скважины с ключом того же цвета открывает дверь навсегда, скважина после этого исчезает |
-| Зелье | +1 жизнь, +100 очков |
-| «?» (mystery) | случайный бонус 250 до 1000 очков, шаг 50 |
-| Shadow (комната 127) | цель pod-комнаты, при убийстве начинает новый круг, +5000 очков |
+| Key | goes into the inventory (colored icon in the HUD); a collected key no longer appears |
+| Keyhole | one door of the room is closed by a colored block; touching the keyhole with a key of the same color opens the door permanently, and the keyhole disappears after that |
+| Potion | +1 life, +100 points |
+| "?" (mystery) | random bonus from 250 to 1000 points, step 50 |
+| Shadow (room 127) | the target of the pod room, killing it starts a new round, +5000 points |
 
-Объекты появляются при входе в комнату в одной из 9 клеток сетки `#` (случайно, на свободном месте, не ближе 4 клеток от входа).
+Objects appear when entering a room in one of the 9 cells of the `#` grid (randomly, on a free spot, no closer than 4 cells from the entrance).
 
-Все предметы левитируют над полом и медленно вращаются (кроме скважины). Ключ и скважина лежат плашмя в обеих проекциях:
-у ключа видны кольцо-головка, стержень и бородка, у скважины — диск с чёрной скважиной. Зелье нарисовано большим плюсом,
-«?» — знаком вопроса: в изометрии они стоят вертикально и вращаются вокруг вертикальной оси, сверху лежат плашмя и не вращаются.
-Ориентация следует за анимацией камеры, поэтому при переключении вида предметы плавно ложатся и встают.
+All items levitate above the floor and slowly rotate (except the keyhole). The key and the keyhole lie flat in both views:
+the key shows a ring head, a shaft and a bit; the keyhole shows a disc with a black keyhole. The potion is drawn as a large plus,
+"?" as a question mark: in isometric view they stand upright and rotate around the vertical axis, in top view they lie flat and do not rotate.
+Orientation follows the camera animation, so when switching views the items smoothly lie down and stand up.
 
-### Pod-комнаты
+### Pod Rooms
 
-Два вертикальных барьера, в каждом движущаяся щель; в центре цель (ключ, зелье, «?» или Shadow). Игрока барьеры не пропускают, пули
-пропускают только через щели. Попадание в цель убирает барьеры и создаёт в комнате врагов; сам объект остаётся и подбирается.
-Открытые pod-комнаты остаются открытыми при повторном входе.
+Two vertical barriers, each with a moving gap; in the center is the target (key, potion, "?" or Shadow). The barriers do not let the player through, and bullets
+pass only through the gaps. Hitting the target removes the barriers and spawns enemies in the room; the object itself remains and can be picked up.
+Opened pod rooms stay open on re-entry.
 
 ## 7. Shadow
 
-Если задержаться в комнате, через 10 секунд мигает предупреждение, через 15 секунд появляется Shadow: неуязвимый преследователь,
-идущий к игроку кратчайшим путём (BFS по клеткам), на 15% медленнее игрока. Контакт убивает; выход из комнаты и смерть сбрасывают таймер.
-В pod-комнатах Shadow не появляется. В комнате 127 Shadow стоит как цель: его убийство завершает круг.
+If you linger in a room, a warning blinks after 10 seconds, and after 15 seconds Shadow appears: an invulnerable pursuer
+walking to the player by the shortest path (BFS over cells), 15% slower than the player. Contact kills; leaving the room or dying resets the timer.
+Shadow does not appear in pod rooms. In room 127 Shadow stands as the target: killing it completes the round.
 
-## 8. Сложность
+## 8. Difficulty
 
 | | Novice | Advanced | Expert |
 |---|---|---|---|
-| Скорость врагов | x0.8 | x1.0 | x1.25 |
-| Интервал выстрелов врагов | x1.3 | x1.0 | x0.75 |
-| Жизни | +1 | 5 | -1 (минимум 3) |
+| Enemy speed | x0.8 | x1.0 | x1.25 |
+| Enemy fire interval | x1.3 | x1.0 | x0.75 |
+| Lives | +1 | 5 | -1 (minimum 3) |
 
-**God mode** (тестовая опция): стены и враги не убивают, рекорды не сохраняются.
+**God mode** (test option): walls and enemies do not kill, high scores are not saved.
 
-## 9. Интерфейс
+## 9. Interface
 
-- HUD: счёт, рекорд, жизни, ключи; внизу комната, уровень, лабиринт, круг, число врагов; предупреждения Shadow; всплывающие сообщения.
-- Пауза (Resume / Restart / Main menu), экран Game Over с рекордом, карта (4 панели уровней, как в оригинальной схеме).
-- Главное меню: Start game, Settings, Quit. Экран Settings в непрозрачной скруглённой карточке: разделы Gameplay (лабиринт, зерно
-  для процедурного, сложность, God mode), Video (окно / полный экран) и Audio (эффекты, музыка). Титульный экран рисует только меню, без комнаты.
-- Окно можно менять в размерах, кадр сохраняет пропорции 16:9 (чёрные поля), полный экран идёт в разрешении дисплея.
-- Рекорды хранятся отдельно для каждого лабиринта в `%APPDATA%\Shamus3D\settings.json`.
+- HUD: score, high score, lives, keys; at the bottom the room, level, maze, round, number of enemies; Shadow warnings; pop-up messages.
+- Pause (Resume / Restart / Main menu), Game Over screen with the high score, map (4 level panels, as in the original diagram).
+- Main menu: Start game, Settings, Quit. The Settings screen is an opaque rounded card with sections: Gameplay (maze, seed for procedural, difficulty,
+  WALLS DON'T KILL, God mode), Video (window / fullscreen) and Audio (effects, music). The title screen draws only the menu, without the room.
+- The window can be resized, the frame keeps a 16:9 aspect ratio (black bars), fullscreen runs at the display resolution.
+- High scores are stored separately for each maze in `%APPDATA%\Shamus3D\settings.json`.
 
-## 10. Графика и звук
+## 10. Graphics and Sound
 
-- **Два вида** одной и той же сцены, клавиша V (плавный переход 0.35 с, вид сохраняется в настройках): сверху и истинная изометрия с параллельной
-  проекцией (рёбра под 30°). Модели одни и те же, меняется только камера. Управление не зависит от вида: клавиши идут по осям комнаты, поэтому в изометрии
-  «вправо» это вправо-вверх по экрану.
-- **Стены это энергетические силовые поля** между генераторами: сплошные синие столбики с яркой «шапкой» (по одному на угол) в вершинах и на концах стен,
-  между ними одна вертикальная полупрозрачная розовая стена (силовое поле) с яркой верхней кромкой. Цвет «шапок» генераторов зависит от уровня: красный, синий, зелёный, красный.
-  Закрытая дверь это стена цвета ключа.
-  Большие закрытые области (углы комнаты, заливка коридоров) обведены стеной по контуру и чуть темнее пола; тонкие стенки (сетка `#`, рамка центральной
-  колонки) рисуются одной стеной по оси.
-- **Название комнаты** (`ROOM n`) на полу в центре, только контур букв (без заливки), трафаретный шрифт Black Ops One (SIL OFL, `assets/fonts`); размер подобран так, чтобы текст помещался в центральный квадрат сетки `#` и не заходил за стены.
-- **Снаряд игрока** это маленькая жёлтая пуля: цилиндр диаметром с дуло пушки и яркий конус на носу; летит на высоте
-  ствола и стартует ровно из дула. При выстреле у дула вспышка, за снарядом тянется дымный шлейф с огоньком в хвосте
-  («работает двигатель»), при попадании — взрыв: вспышка, искры в стороны и облачко дыма. Звук: короткий пуск с низким
-  бумом, лязгом затвора и шипением горящего топлива, которое слышно, пока снаряд летит; попадание — взрыв с осколками,
-  смерть робота — взрыв с электрическими искрами. Анимированные текстуры не используются: искры, дым и вспышки — те же
-  примитивы (сферы), сложенные аддитивно и обычным альфа-смешением.
-- **Снаряд врага** такого же размера, но круглый оранжевый «плазменный» шарик с бледным ядром и коротким следом из
-  угольков (без дыма), а при выстреле врага у него мигает маленькая оранжевая вспышка. Звук выстрела — серво-щелчок, разряд и плазменное шипение, которое слышно в полёте; попадание — короткий электрический заряд. Свои и чужие снаряды не
-  спутать ни формой, ни цветом, ни шлейфом.
-- **Spiral Drone** выглядит как низкая широкая «тарелка» с шестью шпильками по ободу и сужающейся башней сверху. В башне
-  три вертикальные щели — это орудийные порты: дрон поворачивается к игроку лицом, и веер из трёх выстрелов вылетает
-  именно из щелей, со вспышкой в каждой.
-- **Robo-Droid** устроен просто: две гусеницы со светлой верхней плитой, корпус и круглая башня-барабан, нависающая
-  над гусеницами. По башне идёт тёмный горизонтальный паз, в нём по кругу бегает красный огонёк (как маяк, и он
-  светится). Выстрел идёт из башни — с высоты этого паза. Гусеницы всегда нейтрально-серые, цвет корпуса случайный.
-- **Snap Jumper** — парящий гранёный кристалл: шестигранная «двойная пирамида», внутри медленно вращается яркое ядро,
-  вокруг по орбите летят два осколка. Он полупрозрачный: в ожидании мерцает, прозрачность гуляет примерно от 0% до 65%
-  (настраивается `SnapJumperAlphaMin`/`Max`). Прыжок это телепорт: на старом месте кристалл «прозрачнеет» до полного
-  исчезновения, а на новом одновременно проявляется из прозрачности в полную. Прыгает примерно на 2 клетки раз в секунду,
-  чаще всего в сторону игрока, иногда боком.
-- **Окрас врагов случайный.** Как в оригинале, где роботы красились при генерации комнаты для разнообразия: у нас
-  четыре базовых окраса (магента, янтарный, голубой, багровый), цвет выбирается каждому врагу при появлении и ничего
-  не значит — тип читается по силуэту. Зелёного в палитре нет: зелёный — это танк игрока.
-- **Освещение**: один направленный источник света сверху-слева сцены и мягкие тени (shadow map 2048, PCF 5x5):
-  пол, столбики, игрок, враги и предметы освещаются и отбрасывают тени. Силовые поля, барьеры pod-комнат и интерфейс
-  не освещаются — у них своя эмиссия.
-- **Свечение**: силовые поля и их яркая кромка, «шапки» генераторов, барьеры pod-комнат, пули, куб «?» и глаза Shadow
-  дают мягкий ореол (bloom). Он рисуется отдельным проходом в 1/4 разрешения и складывается со сценой; интерфейс
-  не светится.
-- **Единый масштаб**: всё, что стоит в комнате, придерживается одной шкалы — одна клетка комнаты. Энергетические стены
-  и столбики-генераторы намеренно низкие (половина клетки): они ниже танка и врагов, чтобы в изометрии не закрывать их
-  полупрозрачной панелью. Барьеры pod-комнат той же высоты, пули летят в полосе стен, а Shadow выше всех — он не должен
-  выглядеть частью комнаты.
-- Барьеры pod-комнат: полупрозрачные янтарные энергетические плиты. Цвета объектов по палитре Atari (тон и яркость из карты).
-- **Игрок** это небольшой квадратный танк: корпус-параллелепипед, две гусеницы по бокам, сверху в центре башня-полусфера с пушкой.
-  Корпус сидит между гусеницами, а не поверх них. Поворот корпуса — часть симуляции: танк доворачивает на месте перед
-  движением (см. §4), и рендер рисует ровно этот угол, поэтому вид и правила не расходятся.
-  Враги, Shadow, пули и предметы тоже собраны из примитивов (куб, сфера, цилиндр).
-- Звук полностью синтезируется: 20 эффектов, 2–5 вариантов каждого.
-- Фоновая атмосфера (электронный эмбиент) генерируется в реальном времени и не повторяется: пульсирующий бас-секвенсор,
-  пилообразный пэд, арпеджио по тонам аккорда, машинный шум и электрический гул, цифровые блипы/чирпы/сонар, мягкий кик и эхо.
-  Реагирует на игру: чем больше врагов и опаснее Shadow, тем напряжённее (фильтры открываются, темп растёт, бас и кик чаще); в меню,
-  паузе и на карте приглушается. Громкость музыки отдельная (пункт MUSIC).
+- **Two views** of the same scene, key V (smooth transition 0.35 s, the view is saved in the settings): top and true isometric with parallel
+  projection (edges at 30°). The models are the same, only the camera changes. Controls do not depend on the view: keys follow room axes, so in isometric view
+  "right" is up-right on the screen.
+- **Walls are energy force fields** between generators: solid blue posts with a bright "cap" (one per corner) at the vertices and at the ends of walls,
+  between them a single vertical translucent pink wall (force field) with a bright top edge. The color of the generator "caps" depends on the level: red, blue, green, red.
+  A closed door is a wall of the key's color.
+  Large closed areas (room corners, corridor fills) are outlined by a wall along the contour and are slightly darker than the floor; thin walls (the `#` grid, the frame of the central
+  column) are drawn as a single wall along the axis.
+- **Room name** (`ROOM n`) on the floor in the center, outline letters only (no fill), stencil font Black Ops One (SIL OFL, `assets/fonts`); the size is chosen so that the text fits into the central square of the `#` grid and does not go beyond the walls.
+- **The player's projectile** is a small yellow bullet: a cylinder with the diameter of the cannon muzzle and a bright cone at the nose; it flies at the height of
+  the barrel and starts exactly from the muzzle. When firing there is a flash at the muzzle, a smoky trail with a light at the tail follows the projectile
+  ("the engine is running"), and on impact there is an explosion: a flash, sparks flying sideways and a puff of smoke. Sound: a short launch with a low
+  boom, a breech clank and a hiss of burning fuel that is audible while the projectile flies; an impact is an explosion with shards,
+  a robot's death is an explosion with electric sparks. No animated textures are used: sparks, smoke and flashes are the same
+  primitives (spheres) stacked additively and with normal alpha blending.
+- **The enemy's projectile** is the same size, but a round orange "plasma" ball with a pale core and a short trail of
+  embers (no smoke), and when an enemy fires, a small orange flash blinks on it. The shot sound is a servo click, a discharge and a plasma hiss that is audible in flight; an impact is a short electric zap. Own and enemy projectiles cannot be
+  confused by shape, color or trail.
+- **Spiral Drone** looks like a low wide "saucer" with six spikes around the rim and a tapering tower on top. In the tower
+  there are three vertical slits — these are gun ports: the drone turns to face the player, and the fan of three shots flies out
+  precisely from the slits, with a flash in each.
+- **Robo-Droid** is simple: two tracks with a light top slab, a hull and a round drum turret overhanging
+  the tracks. A dark horizontal groove runs around the turret, and a red light runs around it in a circle (like a beacon, and it
+  glows). The shot comes from the turret — from the height of this groove. The tracks are always neutral gray, the hull color is random.
+- **Snap Jumper** is a floating faceted crystal: a hexagonal "double pyramid", with a bright core slowly rotating inside,
+  and two shards flying in orbit around it. It is translucent: it shimmers while waiting, transparency fluctuates roughly from 0% to 65%
+  (configurable via `SnapJumperAlphaMin`/`Max`). A jump is a teleport: at the old place the crystal "fades" to complete
+  disappearance, and at the new place it simultaneously fades in from transparency to full. It jumps about 2 cells once per second,
+  most often toward the player, sometimes sideways.
+- **Enemy coloring is random.** As in the original, where robots were painted during room generation for variety: we have
+  four base colors (magenta, amber, cyan, crimson), the color is chosen for each enemy on spawn and means nothing
+  — the type is read from the silhouette. There is no green in the palette: green is the player's tank.
+- **Lighting**: one directional light from the upper left of the scene and soft shadows (shadow map 2048, PCF 5x5):
+  the floor, posts, player, enemies and items are lit and cast shadows. Force fields, pod room barriers and the interface
+  are not lit — they have their own emission.
+- **Glow**: force fields and their bright edge, generator "caps", pod room barriers, bullets, the "?" cube and Shadow's eyes
+  give a soft halo (bloom). It is drawn in a separate pass at 1/4 resolution and combined with the scene; the interface
+  does not glow.
+- **Unified scale**: everything in the room follows one scale — one room cell. Energy walls
+  and generator posts are deliberately low (half a cell): they are lower than the tank and enemies so that in isometric view they do not obscure them
+  with a translucent panel. Pod room barriers are the same height, bullets fly in the band of the walls, and Shadow is taller than everything — it must not
+  look like part of the room.
+- Pod room barriers: translucent amber energy slabs. Object colors follow the Atari palette (hue and brightness from the map).
+- **The player** is a small square tank: a box hull, two tracks on the sides, and a hemisphere turret with a cannon on top in the center.
+  The hull sits between the tracks, not on top of them. Hull rotation is part of the simulation: the tank turns in place before
+  moving (see §4), and the renderer draws exactly this angle, so the view and the rules do not diverge.
+  Enemies, Shadow, bullets and items are also assembled from primitives (cube, sphere, cylinder).
+- Sound is fully synthesized: 20 effects, 2–5 variants of each.
+- The background atmosphere (electronic ambient) is generated in real time and never repeats: a pulsating bass sequencer,
+  a sawtooth pad, arpeggios over the chord tones, machine noise and electric hum, digital blips/chirps/sonar, a soft kick and echo.
+  It reacts to the game: the more enemies and the more dangerous Shadow, the tenser it gets (filters open up, tempo rises, bass and kick more often); in the menu,
+  pause and on the map it is muted. Music volume is separate (the MUSIC item).
 
-## 11. Отличия от оригинала
+## 11. Differences from the Original
 
-- 3D-камера и 3D-примитивы вместо пиксельной графики.
-- Числа врагов, скорости, тайминги Shadow, очки и параметры pod-барьеров подобраны на глаз по описаниям (оригинальные значения неизвестны).
-- Поведение врагов описано по общим характеристикам, а не по дизассемблеру.
-- Автоматические карты и процедурные лабиринты отсутствуют в оригинале.
-- Комнаты 0 и 127 запечатаны по краям лабиринта.
+- 3D camera and 3D primitives instead of pixel graphics.
+- Enemy counts, speeds, Shadow timings, points and pod barrier parameters are estimated by eye from descriptions (the original values are unknown).
+- Enemy behavior is described from general characteristics, not from a disassembler.
+- Automatic maps and procedural mazes are absent in the original.
+- Rooms 0 and 127 are sealed at the edges of the maze.
 
-## 12. Известные ограничения и планы
+## 12. Known Limitations and Plans
 
-- Нет шагов и звуков стен под напряжением.
-- Для лабиринтов, кроме оригинального C64, нет схематичной карты в стиле gif: используется автоматическая раскладка цепочек.
-- В лабиринте Cluseau комната 117 содержит замок без ключа (особенность исходных данных).
-- Данные Atari и C64 «Original» отличаются в 29 комнатах из 128; точность извлечения адресов Atari-карты из XEX не подтверждена полностью.
-- Планы: графика игрока и врагов (после вида уровня), новые враги и оружие, улучшение графики (освещение, частицы), редактор карт, режим tournament, подстройка баланса.
+- No footsteps and no sounds of electrified walls.
+- For mazes other than the original C64 one, there is no schematic map in the gif style: an automatic layout of chains is used.
+- In the Cluseau maze, room 117 contains a lock without a key (a quirk of the source data).
+- The Atari and C64 "Original" data differ in 29 rooms out of 128; the accuracy of extracting the Atari map addresses from the XEX is not fully confirmed.
+- Plans: player and enemy graphics (after the level view), new enemies and weapons, better graphics (lighting, particles), a map editor, tournament mode, balance tuning.

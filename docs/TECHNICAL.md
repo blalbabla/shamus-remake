@@ -1,291 +1,291 @@
-# Shamus 3D: техническая документация
+# Shamus 3D: Technical Documentation
 
-## 1. Стек и сборка
+## 1. Stack and Build
 
-- .NET 10 (SDK 10.0.x), C#, Raylib-cs 8.1.0 (версия закреплена в `Shamus.Game.csproj`), xUnit.
-- `dotnet build` собирает решение `Shamus.sln`, `dotnet test` запускает тесты ядра (87).
-- Ассеты (`assets/mazes/*.maze`, `assets/maps/*.map`, `assets/fonts/*`, `assets/config.json`) объявлены
-  `<Content>` с `CopyToOutputDirectory` и `CopyToPublishDirectory`, поэтому попадают и в `bin`, и в publish.
-  В dev-запуске `GameApp.ConfigPath` всё равно предпочитает исходное дерево (каталог, где есть и `assets`,
-  и `src`), чтобы правки конфига подхватывались по F5 без пересборки.
+- .NET 10 (SDK 10.0.x), C#, Raylib-cs 8.1.0 (version pinned in `Shamus.Game.csproj`), xUnit.
+- `dotnet build` builds the `Shamus.sln` solution, `dotnet test` runs the core tests (88).
+- Assets (`assets/mazes/*.maze`, `assets/maps/*.map`, `assets/fonts/*`, `assets/config.json`) are declared
+  `<Content>` with `CopyToOutputDirectory` and `CopyToPublishDirectory`, so they end up in both `bin` and publish.
+  In a dev run, `GameApp.ConfigPath` still prefers the source tree (the directory that contains both `assets`
+  and `src`) so config edits are picked up on F5 without a rebuild.
 
-## 2. Структура проектов
+## 2. Project Structure
 
 ```
-Shamus.Core        без зависимости от Raylib
-  GameConfig            все игровые константы, загрузка JSON, пресеты сложности
-  InputState            ввод за один тик (MoveX, MoveY, Fire)
+Shamus.Core        no dependency on Raylib
+  GameConfig            all game constants, JSON loading, difficulty presets
+  InputState            input for a single tick (MoveX, MoveY, Fire)
   Mazes/
-    MazeData            128 комнат в 640 байтах, доступ к полям
-    MazeLoader          чтение .maze
-    RoomGrid            сетка 40x22 клеток для одной комнаты (Thick/Thin)
-    RoomWalls           векторные стены: отрезки стен и столбики генераторов
-    RoomFloor           доступная зона (BFS от героя + кольцо стен) и её контур для изометрии
-    MapLayout           схема карты по уровням (из .map или автоматическая)
-    ProceduralMaze      генератор лабиринтов
-    MazeValidator       проверка структуры и проходимости
+    MazeData            128 rooms in 640 bytes, field access
+    MazeLoader          reads .maze
+    RoomGrid            40x22 cell grid for a single room (Thick/Thin)
+    RoomWalls           vector walls: wall segments and generator posts
+    RoomFloor           accessible area (BFS from the hero + wall ring + generator post cells) and its outline for isometric
+    MapLayout           map layout per level (from .map or automatic)
+    ProceduralMaze      maze generator
+    MazeValidator       structure and passability validation
   Simulation/
-    GameWorld           детерминированная симуляция, события
-    Enemy, RoomObject   сущности
-    WorldEvent          события наружу (звук, HUD)
-Shamus.Game        Raylib-фронтенд
-  Program, GameApp      вход, окно, состояния, цикл
-  Rendering/            SceneRenderer (3D), RoomView (стены, столбики, пол, название), CameraRig, LightingShader, ShadowMap,
-                        GlowMap (свечение), RoomMetrics (единый масштаб высот), AtariPalette
+    GameWorld           deterministic simulation, events
+    Enemy, RoomObject   entities
+    WorldEvent          outbound events (sound, HUD)
+Shamus.Game        Raylib frontend
+  Program, GameApp      entry point, window, states, loop
+  Rendering/            SceneRenderer (3D), RoomView (walls, posts, floor, room name), CameraRig, LightingShader, ShadowMap,
+                        GlowMap (bloom), RoomMetrics (single height scale), AtariPalette
   Ui/                   Hud, Menu, SettingsMenu, Settings, MapView, GameInput
   Audio/                Dsp, ProceduralSfx, AmbientSynth, AudioManager
 tools/
   Shamus.MazeExtract    ATR -> assets/mazes/*.maze
-  Shamus.RoomCompare    сравнение RoomGrid со скриншотами room*.png
+  Shamus.RoomCompare    compares RoomGrid against room*.png screenshots
 tests/Shamus.Core.Tests
 ```
 
-Зависимости односторонние: Game, tools и tests ссылаются на Core. Core не знает ни про Raylib, ни про звук.
+Dependencies are one-way: Game, tools, and tests reference Core. Core knows nothing about Raylib or sound.
 
-## 3. Цикл и время
+## 3. Loop and Timing
 
-- Фиксированный шаг 60 Hz (`Step = 1/60`) с аккумулятором, максимум 0.1 с накопления за кадр.
-- За каждый `GameWorld.Tick(InputState)` фронтенд передаёт `world.Events` в `AudioManager.Handle` и `Hud.OnEvents`.
-- Рендер интерполирует позицию игрока между `PrevPlayerX/Y` и `PlayerX/Y` по `alpha = acc / Step`.
-- Единицы мира: клетки комнаты (`RoomGrid.W x RoomGrid.H` = 40 x 22), время в тиках.
-- **Ввод:** `Ui/GameInput` опрашивается раз в кадр и объединяет клавиатуру с первым доступным геймпадом:
-  левый стик/D-pad — движение и навигация по меню, A — подтверждение в меню и огонь, B — назад
-  (в игре — пауза), View — карта. Края для меню считаются по предыдущему состоянию; стик в меню
-  срабатывает по ведущей оси с мёртвой зоной 0.6. Клавиатура работает параллельно.
-- **Экранные направления (только стик):** `CameraRig.ScreenToRoom` пересчитывает экранный вектор
-  (x вправо, y вниз) в оси комнаты по текущей камере; в изометрии «вправо» — диагональ вниз по комнате,
-  «вправо-вверх» — прямо по оси X, сверху — 1:1. Базис (`ScreenBasis`) берётся из матриц камеры, поэтому
-  при анимации переключения вида направление меняется плавно. Клавиатура этот пересчёт не использует:
-  она всегда задаёт оси комнаты, как до поддержки геймпада (`GameInput.KeyboardX/Y` против `PadX/Y`).
+- Fixed 60 Hz step (`Step = 1/60`) with an accumulator, at most 0.1 s accumulated per frame.
+- On every `GameWorld.Tick(InputState)` the frontend passes `world.Events` to `AudioManager.Handle` and `Hud.OnEvents`.
+- Rendering interpolates the player position between `PrevPlayerX/Y` and `PlayerX/Y` by `alpha = acc / Step`.
+- World units: room cells (`RoomGrid.W x RoomGrid.H` = 40 x 22), time in ticks.
+- **Input:** `Ui/GameInput` is polled once per frame and merges the keyboard with the first available gamepad:
+  left stick/D-pad — movement and menu navigation, A — confirm in menus and fire, B — back
+  (in game — pause), View — map. Menu edges are computed from the previous state; the menu stick
+  triggers on the dominant axis with a 0.6 dead zone. The keyboard works in parallel.
+- **Screen directions (stick only):** `CameraRig.ScreenToRoom` converts a screen vector
+  (x right, y down) into room axes for the current camera; in isometric, "right" is a down-diagonal across the room,
+  "up-right" is straight along the X axis, and up is 1:1. The basis (`ScreenBasis`) comes from the camera matrices, so
+  while the view-switch animation runs the direction changes smoothly. The keyboard does not use this conversion:
+  it always sets room axes, as before gamepad support (`GameInput.KeyboardX/Y` vs `PadX/Y`).
 
-## 4. Симуляция (`GameWorld`)
+## 4. Simulation (`GameWorld`)
 
-Порядок тика (`Tick`):
+Tick order (`Tick`):
 
-1. Состояния `GameOver` / `Won` (отсчёт к новому кругу) / `Dying` (отсчёт к возрождению) обрабатываются отдельно.
-2. Обновление щелей pod-комнаты, поворот корпуса, движение игрока (столкновения, переходы между комнатами, смерть о стены).
-3. Огонь, подбор объектов, пули игрока (столкновения с пулями врагов, врагами, барьерами, целью, стенами).
-4. Враги (движение, стрельба, контакт), пули врагов, Shadow.
+1. The `GameOver` / `Won` (countdown to a new cycle) / `Dying` (countdown to respawn) states are handled separately.
+2. Pod room slit update, hull rotation, player movement (collisions, room transitions, death from walls).
+3. Fire, item pickup, player bullets (collisions with enemy bullets, enemies, barriers, the goal, walls).
+4. Enemies (movement, shooting, contact), enemy bullets, Shadow.
 
-Ключевые моменты:
+Key points:
 
-- **Спавн врагов:** `RoomGrid.IsAreaFree(x, y, r)` проверяет **все** клетки под квадратом зазора, а не только четыре
-  угла: стена может пересекать середину стороны квадрата, и старый corner-тест пропускал такое место.
-  `GameWorld.OpenArea` вызывается через него; зазор спавна — `max(0.7, EnemyRadius + 0.2)`, так что тело врага
-  целиком на полу и не застревает в энергостене.
-- **Снаряды игрока:** `Fire` создаёт снаряд не в центре корпуса, а в дуле — `GameConfig.MuzzleLength` (0.74) вперёд
-  по `FaceX/FaceY`, поэтому нарисованное и обсчитываемое совпадают. Если дуло оказалось в твёрдой клетке (выстрел
-  в упор в стену), снаряд стартует из корпуса и умирает на первом шаге. Событие `Shot` тоже несёт точку дула.
-  Снаряды врагов (`EnemyBullets`) по-прежнему рождаются в центре врага — это их «дуло».
-- **Поворот танка:** у мира есть курс `Heading` (градусы: 90 = +x, 0 = +y) и `PrevHeading` для интерполяции. `UpdateHeading`
-  каждый тик доворачивает курс к нажатому направлению (`FaceX/FaceY`) на долю остатка `TurnEasePerTick` (0.45). Пока
-  `Turning` (остаток больше `TurnToleranceDeg` = 9°), `MovePlayer` выходит до расчёта движения: **танк сначала
-  разворачивается на месте и только потом едет**. Отпущенная клавиша доворот не отменяет — одно нажатие это поворот.
-  Выстрел не заблокирован: `Fire` берёт `FaceX/FaceY`, поэтому пуля летит в нажатом направлении сразу. Тайминги
-  (проверка допуска идёт до шага, поэтому тиков на один больше, чем «чистая» геометрия): 45° ≈ 4 тика (67 мс),
-  90° ≈ 5 (83 мс), 135° ≈ 6 (100 мс), 180° ≈ 7 (117 мс). Всё по тикам, без времени кадра, поэтому симуляция
-  остаётся детерминированной.
-- **Детерминизм:** весь случай идёт через один `Random(config.Seed)` внутри мира; одинаковые входы дают одинаковое состояние.
-- **События** (`WorldEventKind`): Shot, BulletHitWall/Barrier/Shadow, BulletsCancelled, EnemyShot/Killed, PlayerDied, GameOver, KeyPicked,
+- **Enemy spawn:** `RoomGrid.IsAreaFree(x, y, r)` checks **all** cells under the clearance square, not just the four
+  corners: a wall can cross the middle of a square side, and the old corner test missed such a spot.
+  `GameWorld.OpenArea` is called through it; the spawn clearance is `max(0.7, EnemyRadius + 0.2)`, so the enemy body
+  is entirely on the floor and does not get stuck in an energy wall.
+- **Player projectiles:** `Fire` creates the projectile not at the hull center but at the muzzle — `GameConfig.MuzzleLength` (0.74) forward
+  along `FaceX/FaceY`, so what is drawn and what is simulated match. If the muzzle ends up in a solid cell (a point-blank
+  shot into a wall), the projectile starts from the hull and dies on the first step. The `Shot` event also carries the muzzle point.
+  Enemy projectiles (`EnemyBullets`) still spawn at the enemy center — that is their "muzzle".
+- **Tank rotation:** the world has a `Heading` (degrees: 90 = +x, 0 = +y) and `PrevHeading` for interpolation. `UpdateHeading`
+  each tick turns the heading toward the pressed direction (`FaceX/FaceY`) by a fraction of the remainder, `TurnEasePerTick` (0.45). While
+  `Turning` (the remainder is greater than `TurnToleranceDeg` = 9°), `MovePlayer` returns before movement is computed: **the tank first
+  turns in place and only then drives**. Releasing the key does not cancel the turn — one press is one turn.
+  Firing is not blocked: `Fire` uses `FaceX/FaceY`, so the bullet flies in the pressed direction immediately. Timings
+  (the tolerance check runs before the step, so there is one more tick than the "pure" geometry): 45° ≈ 4 ticks (67 ms),
+  90° ≈ 5 (83 ms), 135° ≈ 6 (100 ms), 180° ≈ 7 (117 ms). Everything is in ticks, not frame time, so the simulation
+  stays deterministic.
+- **Determinism:** all randomness goes through a single `Random(config.Seed)` inside the world; identical inputs produce an identical state.
+- **Events** (`WorldEventKind`): Shot, BulletHitWall/Barrier/Shadow, BulletsCancelled, EnemyShot/Killed, PlayerDied, GameOver, KeyPicked,
   DoorOpened, PotionPicked, BonusPicked, PodOpened, RoomCleared, RoomEntered, ShadowWarning/Appeared/Killed, CycleStarted.
-- **Переходы:** выход за `x >= W` входит в комнату r+1 (x=1.5), за `x < 0` в r-1; коридоры: выход за верх/низ идёт в `VerticalLink`
-  (y = 1.5 или H-1.5). В не-коридорах вертикальный выход убивает.
-- **Граница лабиринта:** `EnterRoom` запечатывает левую дверь комнаты 0 и правую комнаты 127 (`RoomGrid.SetSolid`).
-- **Двери:** в комнате со скважиной закрытая дверь это блок из твёрдых клеток (столбец 0 или W-1, строки 8..13); сторона из бита 4 цветового байта.
-- **Pod-комнаты:** `InBarrier(x, y)` проверяет барьеры с щелью; состояние `_podsOpened` запоминает открытые комнаты.
-- **Shadow:** путь строится BFS от клетки игрока (`NextWaypoint`), скорость `PlayerSpeed * ShadowSpeedFactor * (1 + 0.1 * min(Cycle, 4))`.
-- **Новый круг:** `NextCycle` сбрасывает подобранные объекты и замки, увеличивает `Cycle`, возвращает в комнату 1.
-- **God mode:** `Die()` ничего не делает; стены блокируют со скольжением (`MovePlayer`), игрок не выходит за вертикальные границы.
+- **Transitions:** going past `x >= W` enters room r+1 (x=1.5), past `x < 0` enters r-1; corridors: going past the top/bottom leads to `VerticalLink`
+  (y = 1.5 or H-1.5). In non-corridors a vertical exit kills.
+- **Maze boundary:** `EnterRoom` seals the left door of room 0 and the right door of room 127 (`RoomGrid.SetSolid`).
+- **Doors:** in a room with a keyhole the closed door is a block of solid cells (column 0 or W-1, rows 8..13); the side comes from bit 4 of the color byte.
+- **Pod rooms:** `InBarrier(x, y)` checks barriers with a slit; the `_podsOpened` state remembers opened rooms.
+- **Shadow:** the path is built by BFS from the player cell (`NextWaypoint`), speed `PlayerSpeed * ShadowSpeedFactor * (1 + 0.1 * min(Cycle, 4))`.
+- **New cycle:** `NextCycle` resets picked-up items and locks, increments `Cycle`, and returns to room 1.
+- **God mode:** `Die()` does nothing; walls block with sliding (`MovePlayer`), and the player cannot leave the vertical bounds.
 
-Враги (`Enemy`): общая функция `Decide` выбирает намерение случайным образом по типу (веса в коде), `Move` двигает с проверкой клеток
-(`OpenArea`), без смерти от стен. Стрельба зависит от типа (`CanShoot` для дронов). Для тестов есть `DebugTeleport`.
+Enemies (`Enemy`): the shared `Decide` function picks an intent randomly per type (weights in code), `Move` moves with cell checks
+(`OpenArea`), with no death from walls. Shooting depends on the type (`CanShoot` for drones). There is `DebugTeleport` for tests.
 
-## 5. Конфигурация
+## 5. Configuration
 
-`assets/config.json` десериализуется в `GameConfig` (свойства `init`). Игра ищет файл сначала в исходном дереве (рядом с `src`),
-чтобы F5 подхватывал правки без пересборки. Сложность и God mode применяются клонированием: `WithDifficulty`, `WithGodMode`
-(сериализация в `JsonNode`, правка полей, десериализация). Настройки пользователя (`Settings`): лабиринт, сложность, громкость,
-mute, God mode, зерно, рекорды: `%APPDATA%\Shamus3D\settings.json`.
+`assets/config.json` is deserialized into `GameConfig` (`init` properties). The game looks for the file first in the source tree (next to `src`)
+so F5 picks up edits without a rebuild. Difficulty, God mode, and the walls-don't-kill option are applied by cloning: `WithDifficulty`, `WithGodMode`, `WithWallsKill`
+(serialize to `JsonNode`, edit fields, deserialize). User settings (`Settings`): maze, difficulty, volume,
+mute, God mode, seed, high scores: `%APPDATA%\Shamus3D\settings.json`.
 
-## 6. Рендеринг
+## 6. Rendering
 
-**Векторные стены.** `RoomGrid` помечает каждую твёрдую клетку как `Thick` (залитая область) или `Thin` (стенка в одну клетку). `RoomWalls.Build`
-(кэшируется в `RoomGrid.Walls`, сбрасывается при любом изменении сетки, например при открытии двери) строит `WallSet`:
-линии через центры пограничных `Thick`-клеток (выпуклые углы замыкаются через угловую клетку) и через центры серий `Thin`-клеток;
-линия, которая заканчивается у соседней `Thick`-клетки, доводится до её центра. Все концы лежат на одной сетке «центров клеток», поэтому в каждом углу ровно
-один генератор (тест проверяет, что генераторы не ближе одной клетки друг к другу). Логика столкновений по-прежнему использует клетки.
+**Vector walls.** `RoomGrid` marks each solid cell as `Thick` (filled area) or `Thin` (a wall one cell wide). `RoomWalls.Build`
+(cached in `RoomGrid.Walls`, reset on any grid change, for example when a door opens) builds a `WallSet`:
+lines through the centers of border `Thick` cells (convex corners close through the corner cell) and through the centers of `Thin` cell runs;
+a line that ends at a neighboring `Thick` cell is extended to its center. All endpoints lie on one "cell centers" grid, so each corner has exactly
+one post (a test checks that posts are no closer than one cell to each other). Collision logic still uses cells.
 
-**Камера.** `CameraRig`: одна ортографическая камера с двумя режимами (`ViewMode.Top` и `ViewMode.Isometric`, направление взгляда (1,-1,-1)), переход
-интерполирует направление, вектор `Up` и высоту обзора. Отладка: `--view top|iso`, `--shot файл.png` сохраняет кадр (на 8-м кадре) и завершает игру,
-что позволяет сравнивать картинку со скетчами без ручного запуска.
+**Camera.** `CameraRig`: a single orthographic camera with two modes (`ViewMode.Top` and `ViewMode.Isometric`, view direction (1,-1,-1)); the transition
+interpolates the direction, the `Up` vector, and the view height. Debug: `--view top|iso`, `--shot file.png` saves a frame (on frame 8) and exits the game,
+which lets you compare the image with sketches without a manual launch.
 
-**Окно и масштаб.** Окно можно свободно менять в размерах (и полноэкранный режим использует разрешение дисплея): кадр рендерится напрямую
-в окно с MSAA в родном разрешении, но вписывается в фиксированные 16:9 с чёрными полями, а 2D-интерфейс масштабируется из пространства
-1280x720 (ортопроекция `Rlgl.MultMatrixf`, viewport и scissor в `GameApp.Run`). 3D-проекция задаётся вручную в `CameraRig.BeginView`/`EndView`,
-потому что `BeginMode3D` берёт аспект из размера окна и искажал бы сцену в не-16:9 окне. Движок MSAA (4x) включён на окне.
+**Window and scale.** The window can be freely resized (fullscreen mode also uses the display resolution): the frame renders directly
+into the window with MSAA at native resolution, but is fitted into a fixed 16:9 with black bars, and the 2D interface is scaled from the
+1280x720 space (ortho projection `Rlgl.MultMatrixf`, viewport and scissor in `GameApp.Run`). The 3D projection is set manually in `CameraRig.BeginView`/`EndView`,
+because `BeginMode3D` takes the aspect from the window size and would distort the scene in a non-16:9 window. The MSAA engine (4x) is enabled on the window.
 
-**Уровень.** `RoomView.DrawSolid` рисует пол, тёмные закрытые зоны, название комнаты (текстура из текста шрифтом `assets/fonts/BlackOpsOne-Regular.ttf`,
-рисуется плоским четырёхугольником через `Rlgl`; заливка букв убирается, остаётся только контур) и столбики генераторов; `RoomView.DrawWalls` после непрозрачной
-геометрии рисует вертикальные полупрозрачные розовые стены (одна панель на отрезок стены, яркая верхняя кромка) без записи глубины; перед отключением записи
-глубины батч сбрасывается через `Rlgl.DrawRenderBatchActive()`, иначе столбики растеризуются без глубины и стены ложатся поверх них.
-Цвет «шапок» генераторов по уровню (`RoomView.Neon`), закрытая дверь рисуется цветом ключа.
+**Level.** `RoomView.DrawSolid` draws the floor, dark closed zones, the room name (a texture from text in the `assets/fonts/BlackOpsOne-Regular.ttf` font,
+drawn as a flat quad through `Rlgl`; letter fill is disabled, leaving only the outline) and the generator posts; `RoomView.DrawWalls` after the opaque
+geometry draws vertical semi-transparent pink walls (one panel per wall segment, bright top edge) without depth writes; before disabling depth writes
+the batch is flushed via `Rlgl.DrawRenderBatchActive()`, otherwise the posts are rasterized without depth and the walls are drawn over them.
+The color of the generator "caps" depends on the level (`RoomView.Neon`); a closed door is drawn in the key color.
 
-`SceneRenderer` читает состояние мира и рисует: пол, стены (горизонтальные серии клеток сливаются в один куб), дверь, объект,
-барьеры pod-комнаты, игрока (танк: корпус, гусеницы, башня-полусфера и пушка в `DrawTank`), врагов, Shadow, пули.
+`SceneRenderer` reads the world state and draws: floor, walls (horizontal cell runs merge into a single cube), door, item,
+pod room barriers, the player (a tank: hull, tracks, dome turret and gun in `DrawTank`), enemies, Shadow, bullets.
 
-**Плита в изометрии.** `RoomFloor.Mask(grid, seedX, seedY)` делает BFS от клетки игрока по `Empty`-клеткам, добавляет одно кольцо
-соседних `Thin`/`Thick`-клеток и клетки под площадками всех генераторов, чтобы ни один пост не висел над обрывом. `RoomFloor.MergedBoundary(mask)` отдаёт
-осевые рёбра контура, склеенные в длинные сегменты (`Boundary` — те же рёбра по клеткам, для тестов).
-`RoomView.DrawPlateauFloor` рисует пол merged-runs по маске, а сверху — тёмные металлические плиты (2×2 клетки, по 1×1 на неровных краях) с фаской, швами и детерминированным оттенком верха; `DrawPlateauSides` — стену на каждом ребре и
-угловой куб в каждой вершине. Боковины рисуются в **нелит-проходе** (после `LightingShader.End`) двумя плоскими
-тонами: южные грани (на экране идут снизу-слева вверх-вправо) заливаются тёмным `CliffShade`, западные — базовым
-`CliffColor`. Угловые кубы и широкая колонна под каждым генератором (1.02 × depth) — базовым цветом, без тёмной накладки: пост стоит на колонне, и закрытый угол читается как торец у выхода, а не как тёмная выемка. На видимых боковинах `Veins` рисует тёмные вертикальные прожилки; позиции, ширина и длина берутся из RNG с зерном номера комнаты, поэтому рисунок стабилен и не мерцает. Освещение и тени на них не считаются: иначе узкая возвратная грань выпуклого угла читается как
-вертикальная выемка. В chamber получается толстый «+», в коридоре — проход; снаружи — обрыв. Плита включается
-при `Rig.IsometricBlend > 0.5`; в верхнем виде рисуется прежний пол.
+**Plateau in isometric.** `RoomFloor.Mask(grid, seedX, seedY)` does a BFS from the player cell over `Empty` cells, adds one ring of
+neighboring `Thin`/`Thick` cells and the cells under all generator platforms so no post hangs over a cliff. `RoomFloor.MergedBoundary(mask)` returns the
+axis-aligned boundary edges merged into long segments (`Boundary` is the same edges per cell, for tests).
+`RoomView.DrawPlateauFloor` draws the floor from merged runs over the mask, and on top of it dark metal plates (2×2 cells, 1×1 on uneven edges) with a bevel, seams, and a deterministic top tint; `DrawPlateauSides` draws a wall on each edge and
+a corner cube at each vertex. The sides are drawn in the **unlit pass** (after `LightingShader.End`) in two flat
+tones: south faces (they run bottom-left to top-right on screen) are filled with dark `CliffShade`, west faces with the base
+`CliffColor`. Corner cubes and the wide column under each generator (1.02 × depth) use the base color, with no dark overlay: the post stands on a column, and the closed corner reads as an end face at the exit, not as a dark recess. On visible sides `Veins` draws dark vertical veins; positions, width, and length come from an RNG seeded with the room number, so the pattern is stable and does not flicker. Lighting and shadows are not computed for them: otherwise the narrow return face of a convex corner reads as a
+vertical recess. In a chamber the result is a thick "+", in a corridor a passage; outside is a cliff. The plateau is enabled
+at `Rig.IsometricBlend > 0.5`; in top view the previous floor is drawn.
 
-**Предметы.** `SceneRenderer.DrawItem` рисует ключ (`KeyModel`), скважину (`KeyholeModel`), зелье-плюс (`PlusModel`) и «?»
-(`QuestionModel`). Все они левитируют; высоты — `RoomMetrics.PropHover` (плоские), `KeyholeHover` и `StandingPropHover`.
-Ключ и скважина лежат в плоскости пола; ключ медленно вращается вокруг вертикали (`ItemTransformFlat`), скважина неподвижна.
-Плюс и «?» построены в локальной плоскости XY: в изометрии стоят вертикально и вращаются вокруг вертикальной оси, в виде сверху
-ложатся (`ItemTransformUpright`, наклон по `Rig.IsometricBlend`) и не вращаются. Наклон и вращение следуют за анимацией
-камеры. «?» дополнительно отдаётся в glow-проход; отдельная 2D-подпись больше не нужна.
+**Items.** `SceneRenderer.DrawItem` draws the key (`KeyModel`), the keyhole (`KeyholeModel`), the potion-plus (`PlusModel`) and the "?"
+(`QuestionModel`). All of them levitate; heights are `RoomMetrics.PropHover` (flat ones), `KeyholeHover`, and `StandingPropHover`.
+The key and the keyhole lie in the floor plane; the key slowly rotates about the vertical (`ItemTransformFlat`), the keyhole is static.
+The plus and the "?" are built in the local XY plane: in isometric they stand upright and rotate about the vertical axis, in top view they
+lie flat (`ItemTransformUpright`, tilt by `Rig.IsometricBlend`) and do not rotate. Tilt and rotation follow the camera
+animation. The "?" is additionally fed to the glow pass; a separate 2D label is no longer needed.
 
-Враги — отдельные методы: `DrawRoboDroid`, `DrawSpiralDrone` и гранёный кристалл у прыгуна. Все трое красятся из`Rendering/EnemyPalette`: четыре схемы (магента, янтарный, голубой, багровый), у каждой
-три оттенка — `Body`, `Light`, `Dark`; зелёного в палитре нет, это цвет танка. Слот выбирает **симуляция** при появлении
-врага (`Enemy.ColorIndex = _rng.Next(Config.EnemyColorCount)`), поэтому окрас детерминирован и виден в тестах, а рендер
-только читает `ColorIndex` (палитра заворачивает индекс, если в конфиге цветов больше, чем в ней). Цвет ничего не значит:
-тип читается по силуэту, как в оригинале, где роботы красились случайно при генерации комнаты.
+Enemies are separate methods: `DrawRoboDroid`, `DrawSpiralDrone`, and the faceted crystal of the jumper. All three are colored from `Rendering/EnemyPalette`: four schemes (magenta, amber, cyan, crimson), each with
+three shades — `Body`, `Light`, `Dark`; there is no green in the palette, that is the tank color. The slot is picked by the **simulation** when an
+enemy appears (`Enemy.ColorIndex = _rng.Next(Config.EnemyColorCount)`), so the coloring is deterministic and visible in tests, and the renderer
+only reads `ColorIndex` (the palette wraps the index if the config has more colors than it does). Color means nothing:
+the type is read from the silhouette, as in the original, where robots were colored randomly when a room was generated.
 
-Робот собран просто и намеренно: две нейтрально-серые гусеницы со светлой верхней плитой, корпус между ними и
-**цилиндрическая башня-барабан**, которая нависает над гусеницами (`RoomMetrics.RobotTurretRadius` = 0.44 против
-внешнего края гусениц 0.49 — гусеницы остаются видны по бокам). По всему диаметру барабана идёт **тёмный паз**
-(цилиндр чуть большего радиуса), а по нему бежит **красный маяк** (`DrawRobotBeacon`, угол `time * 2.2 рад`, тот же
-кубик рисуется и в glow-проходе, поэтому светится). Выстрел — из башни: болты, их шлейф и вспышка идут на высоте паза
-`RoomMetrics.RobotMuzzleY` = 0.57, а вспышка ставится на стенку барабана (`MuzzleOffset`: 0.46 для робота, 0.30 для
-дрона). Курс корпуса живёт в симуляции (`Enemy.Heading`/`PrevHeading`) и доворачивается тем же `EaseHeading`, что и
-танк игрока: доля остатка `TurnEasePerTick` за тик, снап внутри `TurnToleranceDeg`. Одна настройка управляет плавностью
-и игрока, и роботов; рендер только интерполирует угол между тиками (`LerpHeading`), поэтому гусеничная машина плавно
-доворачивает, а не щёлкает на 90°. Цель — ось движения (`DirX/DirY`), так что боком она не едет; при появлении робот
-сразу смотрит в сторону игрока (`AxisToward`), чтобы комната не начиналась с видимого разворота. Башня круглая, ей всё
-равно, откуда стрелять. Гусеницы остаются нейтрально-серыми при любом окрасе корпуса.
+The robot is assembled simply and deliberately: two neutral-gray tracks with a light top plate, the hull between them, and
+a **cylindrical drum turret** that overhangs the tracks (`RoomMetrics.RobotTurretRadius` = 0.44 against
+the outer track edge of 0.49 — the tracks stay visible on the sides). Around the whole drum diameter runs a **dark groove**
+(a cylinder of slightly larger radius), and a **red beacon** runs along it (`DrawRobotBeacon`, angle `time * 2.2 rad`, the same
+cube is drawn in the glow pass too, so it glows). The shot comes from the turret: bolts, their trail, and the flash are at the groove height
+`RoomMetrics.RobotMuzzleY` = 0.57, and the flash is placed on the drum wall (`MuzzleOffset`: 0.46 for the robot, 0.30 for
+the drone). The hull heading lives in the simulation (`Enemy.Heading`/`PrevHeading`) and is turned by the same `EaseHeading` as the
+player tank: a fraction of the remainder `TurnEasePerTick` per tick, snap within `TurnToleranceDeg`. One setting controls the smoothness
+of both the player and the robots; the renderer only interpolates the angle between ticks (`LerpHeading`), so the tracked vehicle turns
+smoothly instead of snapping by 90°. The goal is the movement axis (`DirX/DirY`), so it does not drive sideways; on spawn the robot
+immediately faces the player's direction (`AxisToward`) so the room does not start with a visible turn. The turret is round, so it does not
+care where to shoot from. The tracks stay neutral gray with any hull coloring.
 
-Snap Jumper — призрак, поэтому он **никогда не рисуется как сплошная геометрия**. Модель (`JumperModel`) — парящий
-гранёный кристалл: шестигранная бипирамида (два конуса навстречу) радиусом 0.36 и высотой ±0.46, внутри медленно
-вращается яркое ядро (куб 0.22), вокруг по орбите летят два осколка. Авторотации и осколки делают его живым даже в покое,
-а гранёная форма не путается ни с коробкой-роботом, ни с «тарелкой»-дроном. Рисуется он **внутри освещённого прохода**
-(чтобы грани получали настоящий свет), но с выключенной записью глубины — полупрозрачный кристалл иначе прорезал бы дыру
-в буфере; в glow-проходе он слабо светится. Прозрачность считает `JumperFade`: в покое она мерцает между
-`SnapJumperAlphaMin` (0.35 — по итогам тестов, заметно призрачнее) и `SnapJumperAlphaMax` (1.0) синусом от `time` и
-`Phase`; во время прыжка возвращается пара (body, ghost) — тело проявляется `0 → 1`, а призрак на старом месте гаснет
-`1 → 0` за `SnapBlinkTicks` (12 тиков, 0.2 с). В тени (shadow pass) прыгун остаётся кастером (`JumperShadow` рисует
-силуэт кристалла): полупрозрачный враг с тенью читается лучше, чем без неё.
+Snap Jumper is a ghost, so it is **never drawn as solid geometry**. The model (`JumperModel`) is a floating
+faceted crystal: a hexagonal bipyramid (two cones facing each other) with radius 0.36 and height ±0.46, with a bright core
+(a 0.22 cube) slowly rotating inside, and two shards orbiting around it. The auto-rotation and shards make it feel alive even at rest,
+and the faceted shape is not confused with either the robot box or the "saucer" drone. It is drawn **inside the lit pass**
+(so the facets get real light), but with depth writes disabled — otherwise the semi-transparent crystal would cut a hole
+in the buffer; in the glow pass it glows faintly. Opacity is computed by `JumperFade`: at rest it flickers between
+`SnapJumperAlphaMin` (0.35 — based on test results, noticeably more ghostly) and `SnapJumperAlphaMax` (1.0) via a sine of `time` and
+`Phase`; during a jump it returns a pair (body, ghost) — the body fades in `0 → 1`, and the ghost at the old spot fades out
+`1 → 0` over `SnapBlinkTicks` (12 ticks, 0.2 s). In the shadow pass the jumper remains a caster (`JumperShadow` draws
+the crystal silhouette): a semi-transparent enemy with a shadow reads better than one without.
 
-Сам прыжок — **телепорт, а не рывок**: в `GameWorld` джампер раз в `SnapJumpInterval` (60 тиков) выбирает направление
-(`Decide`, обычно на игрока, иногда боком), проверяет точку `X + JumpX * SnapJumpDistance` на `OpenArea(0.45)` и, если
-там свободно, мгновенно переносится, запомнив `BlinkFromX/Y` и выставив `BlinkTicks`. Так у рендера появляются две
-разные точки для кросс-фейда — при рывке их не было бы. Расстояние (`SnapJumpDistance` = 2) и длина фейда настраиваются
-в `config.json`.
+The jump itself is a **teleport, not a dash**: in `GameWorld` the jumper once every `SnapJumpInterval` (60 ticks) picks a direction
+(`Decide`, usually toward the player, sometimes sideways), checks the point `X + JumpX * SnapJumpDistance` against `OpenArea(0.45)` and, if
+it is free, is moved instantly, remembering `BlinkFromX/Y` and setting `BlinkTicks`. This gives the renderer two
+distinct points for the cross-fade — a dash would not provide them. The distance (`SnapJumpDistance` = 2) and the fade length are configured
+in `config.json`.
 
-Дрон собран по референсу: низкая широкая «тарелка» (цилиндр R 0.58, h 0.20) со светлым верхним диском,
-шесть конических шпилек по ободу и сужающаяся башня (усечённый конус, R 0.34 → 0.235, y 0.53..0.86). Дрон **повёрнут
-лицом к игроку** (`yaw = atan2(player - enemy)`), на этом лице три вертикальные щели-порты на ±0.35 рад — ровно углы
-веера выстрела дрона, поэтому болты вылетают именно из щелей, а не из середины корпуса. Вспышка на `EnemyShot` теперь
-спавнится **на каждый свежий болт** (`Age == 1`), у своего стрелка и на его высоте: у дрона это три вспышки в щелях, у
-робота — одна в пазу башни. Высоты выстрелов вынесены в `RoomMetrics.DroneSlitY` (0.69) и `RoomMetrics.RobotMuzzleY` (0.57),
-и снаряд, его шлейф и вспышка берут высоту по `Bullet.Owner.Kind` (`EnemyShellY`).
-Курс танка рендерер не придумывает: `DrawTank` получает `LerpHeading(PrevHeading, Heading, alpha)` — угол из симуляции,
-проинтерполированный между тиками так же, как позиция игрока (коротким путём через ±180). Логика доворота и правило
-«сначала повернуться, потом ехать» живут в `GameWorld` (см. §4), поэтому вид и геймплей не могут разъехаться.
-Камера ортографическая, два пресета (`CameraRig`): сверху и изометрия. Отдельной 2D-подписи «?» больше нет — знак
-вопроса теперь часть трёхмерной модели. `AtariPalette` переводит (оттенок 0..15, яркость 0..14) в RGB.
+The drone is built from a reference: a low wide "saucer" (cylinder R 0.58, h 0.20) with a light top disk,
+six conical studs around the rim, and a tapering turret (a truncated cone, R 0.34 → 0.235, y 0.53..0.86). The drone is **turned
+to face the player** (`yaw = atan2(player - enemy)`), and on that face are three vertical slit ports at ±0.35 rad — exactly the angles
+of the drone's firing fan, so bolts fly out of the slits, not from the middle of the hull. The `EnemyShot` flash is now
+spawned **for each fresh bolt** (`Age == 1`), at its shooter and at its height: for the drone that is three flashes in the slits, for
+the robot one in the turret groove. Shot heights are moved into `RoomMetrics.DroneSlitY` (0.69) and `RoomMetrics.RobotMuzzleY` (0.57),
+and the projectile, its trail, and the flash take their height from `Bullet.Owner.Kind` (`EnemyShellY`).
+The renderer does not invent the tank heading: `DrawTank` receives `LerpHeading(PrevHeading, Heading, alpha)` — the angle from the simulation,
+interpolated between ticks the same way as the player position (by the short path through ±180). The turning logic and the
+"turn first, then drive" rule live in `GameWorld` (see §4), so visuals and gameplay cannot drift apart.
+The camera is orthographic, with two presets (`CameraRig`): top and isometric. The separate 2D "?" label is gone — the question
+mark is now part of the 3D model. `AtariPalette` converts (hue 0..15, brightness 0..14) to RGB.
 
-**Снаряды и эффекты.** `SceneRenderer.DrawShells` рисует снаряд игрока как `DrawCylinderEx`: цилиндр радиусом 0.055
-(радиус дула) плюс конус на носу, ориентированный по `DX/DY` и на высоте `RoomMetrics.BarrelY` (высота ствола; она же
-в `DrawTank`). Снаряд врага (`DrawEnemyShells`) — плазменный шарик того же размера: сфера 0.085 с бледным ядром 0.045
-на высоте `RoomMetrics.EnemyBulletY` (0.5 — середина робота и центр дрона). Круглый и оранжевый против жёлтой пули,
-поэтому своих и чужих не спутать.
-Снаряды и эффекты не освещаются и рисуются в неосвещённом проходе после `LightingShader.End()`; в glow-проходе они тоже
-участвуют, снаряды — с интенсивностью 0.7 (игрок) и 0.85 (враги), иначе маленькая пуля раздувалась бы ореолом больше танка.
+**Projectiles and effects.** `SceneRenderer.DrawShells` draws the player projectile as `DrawCylinderEx`: a cylinder of radius 0.055
+(the muzzle radius) plus a cone at the nose, oriented along `DX/DY` and at `RoomMetrics.BarrelY` (barrel height; the same value
+in `DrawTank`). The enemy projectile (`DrawEnemyShells`) is a plasma ball of the same size: a 0.085 sphere with a pale 0.045 core
+at `RoomMetrics.EnemyBulletY` (0.5 — the robot's middle and the drone's center). Round and orange versus a yellow bullet,
+so friend and foe cannot be confused.
+Projectiles and effects are not lit and are drawn in the unlit pass after `LightingShader.End()`; they also take part
+in the glow pass, projectiles with intensity 0.7 (player) and 0.85 (enemies), otherwise a small bullet would balloon into a halo bigger than the tank.
 
-`ParticleFx` — косметика, о которой симуляция не знает: список частиц (позиция, скорость, жизнь, радиус, рост, цвет, тип),
-`Update(dt)` двигает их с демпфированием, `Draw()` рисует сферы двумя проходами (дым — альфа, искры/огонь/вспышки — аддитив),
-`DrawEmissive()` отдаёт светящиеся частицы в glow. Спавнится из событий (`SceneRenderer.OnEvents`: `Shot` — вспышка у дула,
-`EnemyShot` — маленькая оранжевая вспышка у стрелка, `BulletHitWall`/`BulletHitBarrier`/`BulletsCancelled`/`BulletHitShadow`/
-`EnemyKilled`/`PodOpened` — взрыв со искрами и дымом) и из живого списка снарядов (`UpdateEffects`: шлейф с частотой тика,
-а не кадра, поэтому плотность не зависит от FPS). Шлейф игрока — дым плюс огонь, шлейф врага — только угольки: плазменный
-болт оставляет короткий затухающий след, а не пороховой дым, и это ещё один способ различить стороны.
-Потолок — 700 частиц, при переполнении выбрасывается самая старая. На паузе и на карте `UpdateEffects` вызывается с `dt = 0`,
-поэтому эффекты замирают вместе с игрой.
+`ParticleFx` is cosmetics the simulation knows nothing about: a particle list (position, velocity, lifetime, radius, growth, color, type),
+`Update(dt)` moves them with damping, `Draw()` draws spheres in two passes (smoke is alpha, sparks/fire/flashes are additive),
+`DrawEmissive()` feeds glowing particles to the glow. It spawns from events (`SceneRenderer.OnEvents`: `Shot` — a muzzle flash,
+`EnemyShot` — a small orange flash at the shooter, `BulletHitWall`/`BulletHitBarrier`/`BulletsCancelled`/`BulletHitShadow`/
+`EnemyKilled`/`PodOpened` — an explosion with sparks and smoke) and from the live projectile list (`UpdateEffects`: the trail at tick
+rate, not frame rate, so density does not depend on FPS). The player trail is smoke plus fire, the enemy trail is embers only: a plasma
+bolt leaves a short fading trace, not powder smoke, and that is another way to tell the sides apart.
+The cap is 700 particles; on overflow the oldest is dropped. When paused and on the map, `UpdateEffects` is called with `dt = 0`,
+so effects freeze together with the game.
 
-**Освещение и тени.** `LightingShader` (Lambert + ambient, PCF 5x5 с радиальными весами) применяется к непрозрачной
-3D-геометрии; `ShadowMap` рисует карту глубины 2048 из ортокамеры вдоль направления света (`LightDirection`, сверху-слева сцены).
-Карта рендерится в начале кадра, до настройки letterbox, потому что переключает FBO и сбрасывает матрицы (`SceneRenderer.RenderShadow`).
-Полупрозрачные силовые поля, барьеры pod-комнат и надпись комнаты рисуются после шейдера без освещения. Если шейдер не собрался,
-`IsAvailable` = false и сцена остаётся без освещения.
+**Lighting and shadows.** `LightingShader` (Lambert + ambient, 5x5 PCF with radial weights) is applied to opaque
+3D geometry; `ShadowMap` renders a 2048 depth map from an ortho camera along the light direction (`LightDirection`, from the top-left of the scene).
+The map is rendered at the start of the frame, before the letterbox is set up, because it switches the FBO and resets matrices (`SceneRenderer.RenderShadow`).
+Semi-transparent energy walls, pod room barriers, and the room label are drawn after the shader without lighting. If the shader failed to build,
+`IsAvailable` = false and the scene stays unlit.
 
-**Свечение (bloom).** `GlowMap` — отдельный проход до letterbox: эмиттеры (силовые поля и кромки, «шапки» генераторов,
-барьеры pod-комнат, пули, куб mystery, глаза Shadow) рисуются аддитивно в FBO размером 1/4 кадра (320x180) без теста глубины,
-затем два separable-блюра 9-tap гауссом (горизонталь и вертикаль, шейдер `GlowMap.Fragment`), и результат аддитивно
-накладывается на кадр в координатах 1280x720 сразу после `Rig.EndView()`. Плотность регулируется `GlowMap.Strength`.
-Приближение: в FBO нет геометрии, поэтому эмиттер светится и за стеной.
+**Bloom.** `GlowMap` is a separate pass before the letterbox: emitters (energy walls and edges, generator "caps",
+pod room barriers, bullets, the mystery cube, Shadow's eyes) are drawn additively into an FBO at 1/4 frame size (320x180) with no depth test,
+then two separable 9-tap Gaussian blurs (horizontal and vertical, shader `GlowMap.Fragment`), and the result is added
+to the frame in 1280x720 coordinates right after `Rig.EndView()`. Density is controlled by `GlowMap.Strength`.
+Approximation: the FBO has no geometry, so an emitter glows even behind a wall.
 
-**Высоты.** `RoomMetrics` задаёт единый масштаб: 1 единица = 1 клетка комнаты. Энергетическая стена и стойка
-генератора — 0.5 (половина клетки), и это намеренно **ниже** персонажей: при 1.0 полупрозрачная панель в изометрии
-закрывала танк и врагов. Pod-барьеры равны стене, танк 0.73 (корпус опущен на половину высоты гусеницы —
-`RoomMetrics.TrackHeight`), враги до 0.96, предметы до 0.96, снаряды игрока на высоте ствола `BarrelY` (0.53),
-снаряды врагов на 0.5, Shadow 1.45 (выше всех: он не должен выглядеть частью комнаты). Новые объекты должны
-выражать высоту через `RoomMetrics`, а не через свои числа, иначе снова разъедется.
-UI: `Hud` (оверлей, тосты), `Menu` (простое вертикальное меню), `MapView` (4 панели уровней по `MapLayout`; «фронтир»: комнаты, достижимые из посещённых через открытые выходы и вертикальные связи, рисуются тёмно-серым).
+**Heights.** `RoomMetrics` sets a single scale: 1 unit = 1 room cell. The energy wall and the generator post
+are 0.5 (half a cell), and that is deliberately **lower** than the characters: at 1.0 the semi-transparent panel in isometric
+covered the tank and the enemies. Pod barriers equal the wall, the tank is 0.73 (the hull is lowered by half the track height —
+`RoomMetrics.TrackHeight`), enemies up to 0.96, items up to 0.96, player projectiles at barrel height `BarrelY` (0.53),
+enemy projectiles at 0.5, Shadow 1.45 (above everything: it must not look like part of the room). New objects must
+express height through `RoomMetrics`, not their own numbers, or things will drift apart again.
+UI: `Hud` (overlay, toasts), `Menu` (a simple vertical menu), `MapView` (4 level panels from `MapLayout`; the "frontier": rooms reachable from visited ones through open exits and vertical links are drawn in dark gray).
 
-Состояния приложения (`GameApp`): Title, Playing, Paused, GameOver, Map.
+Application states (`GameApp`): Title, Playing, Paused, GameOver, Map.
 
-## 7. Звук
+## 7. Sound
 
-Подход как в проекте lode-runner-remake: файлов нет, всё синтезируется.
+Same approach as in the lode-runner-remake project: no files, everything is synthesized.
 
-- `Dsp`: свип частоты, фильтрованный шум, колокольный тембр, нормализация, упаковка в WAV (mono, 16 бит, 44.1 кГц). Чистые функции без Raylib.
-- `ProceduralSfx.Create(sfx, variant)`: детерминированный генератор, зерно зависит от эффекта и номера варианта. 20 эффектов, 2–5 вариантов.
-- Выстрел танка: пусковая волна (щелчок, низкий бум, лязг затвора) и шипение горящего топлива, которое тянется за снарядом;
-  попадание в стену — взрыв с осколками (`HitWall`), смерть робота — взрыв с электрическими искрами (`EnemyDie`).
-- Выстрел робота: серво-щелчок, магнитный разряд и плазменное шипение с вибрато; попадание в стену — `EnemyImpact`
-  (короткий заряд и искры), попадание в игрока — `PlayerDie`.
-- `AudioManager`: при старте рендерит все варианты через `Parallel.For` (около 75 звуков, примерно 0.2 с), загружает в Raylib
-  (`LoadWaveFromMemory`, `LoadSoundFromWave`), при воспроизведении берёт свободный вариант, добавляет лёгкий разброс высоты.
-  Без аудиоустройства менеджер неактивен. Отображение событий на звуки находится в `Handle`.
-- `AmbientSynth`: электронная фоновая атмосфера в реальном времени (чистый DSP, без Raylib). Слои: суб-дрон, пэд из четырёх
-  пилообразных/квадратных голосов, плавно скользящих к следующему аккорду (аккорд меняется каждые 18–32 с), 16-ступенчатый
-  бас-секвенсор, арпеджио по тонам аккорда, машинный шум и гул, цифровые блипы (двухтоновые бипы, чирпы, data-бёрсты, сонар)
-  и кик; стерео-эхо с перекрёстной обратной связью, итоговый ФНЧ (`Muffle`) и мягкий клиппер.
-  Четыре медленных LFO (периоды 55/73/89/107 с) двигают громкость слоёв между 20 и 100%.
-- `AudioManager.UpdateMusic(tension, muffle)` вызывается каждый кадр из `GameApp.UpdateAmbience`: когда Raylib-поток освободил буфер
-  (`IsAudioStreamProcessed`), рендерится блок 4096 кадров и отправляется через `UpdateAudioStream`. Напряжение считается из числа врагов,
-  предупреждения и появления Shadow, закрытой pod-комнаты; в меню, паузе и на карте включается приглушение.
+- `Dsp`: frequency sweep, filtered noise, bell timbre, normalization, packing into WAV (mono, 16 bit, 44.1 kHz). Pure functions without Raylib.
+- `ProceduralSfx.Create(sfx, variant)`: a deterministic generator; the seed depends on the effect and the variant number. 20 effects, 2–5 variants.
+- Tank shot: a launch wave (click, low boom, breech clank) and the hiss of burning fuel trailing behind the projectile;
+  a wall hit — an explosion with debris (`HitWall`), a robot death — an explosion with electric sparks (`EnemyDie`).
+- Robot shot: a servo click, a magnetic discharge, and plasma hiss with vibrato; a wall hit — `EnemyImpact`
+  (a short charge and sparks), a hit on the player — `PlayerDie`.
+- `AudioManager`: on startup renders all variants via `Parallel.For` (about 75 sounds, roughly 0.2 s), loads them into Raylib
+  (`LoadWaveFromMemory`, `LoadSoundFromWave`), and on playback takes a free variant and adds a slight pitch spread.
+  Without an audio device the manager is inactive. The event-to-sound mapping lives in `Handle`.
+- `AmbientSynth`: a real-time electronic background atmosphere (pure DSP, no Raylib). Layers: a sub drone, a pad of four
+  saw/square voices sliding smoothly to the next chord (the chord changes every 18–32 s), a 16-step
+  bass sequencer, an arpeggio over the chord tones, machine noise and hum, digital blips (two-tone beeps, chirps, data bursts, sonar),
+  and a kick; stereo echo with cross feedback, a final low-pass filter (`Muffle`), and a soft clipper.
+  Four slow LFOs (periods 55/73/89/107 s) move layer volume between 20 and 100%.
+- `AudioManager.UpdateMusic(tension, muffle)` is called every frame from `GameApp.UpdateAmbience`: when the Raylib stream has freed the buffer
+  (`IsAudioStreamProcessed`), a block of 4096 frames is rendered and sent via `UpdateAudioStream`. Tension is computed from the enemy count,
+  the Shadow warning and appearance, and a closed pod room; in menus, pause, and the map, muffling is enabled.
 
-## 8. Инструменты
+## 8. Tools
 
-- `Shamus.MazeExtract <atr> <outDir>`: читает DOS 2.x образ (каталог в секторах 361–368, цепочки секторов по 125 байт данных),
-  достаёт `SHAM_A8.MAP` (5 лабиринтов по 640 байт: c64, holmes, cluseau, marlowe, bond) и собирает оригинальный Atari-лабиринт из XEX
-  (код релоцируется вниз на `$3000`: адреса карты `$23F2/$2472/$1D43/$1DC3/$1EE3/$24F8`).
-- `Shamus.RoomCompare <maze> <imagesDir> [room]`: строит маску стен из скриншота (320x200, клетка 8x8) и сравнивает с `RoomGrid`;
-  с номером комнаты печатает ASCII-вид рядом. Скриншоты соответствуют C64-версии, поэтому сверять нужно с `c64.maze`.
+- `Shamus.MazeExtract <atr> <outDir>`: reads a DOS 2.x image (directory in sectors 361–368, sector chains of 125 data bytes),
+  extracts `SHAM_A8.MAP` (5 mazes of 640 bytes each: c64, holmes, cluseau, marlowe, bond), and builds the original Atari maze from the XEX
+  (code is relocated down to `$3000`: map addresses `$23F2/$2472/$1D43/$1DC3/$1EE3/$24F8`).
+- `Shamus.RoomCompare <maze> <imagesDir> [room]`: builds a wall mask from a screenshot (320x200, 8x8 cell) and compares it with `RoomGrid`;
+  with a room number it prints the ASCII view alongside. The screenshots correspond to the C64 version, so compare against `c64.maze`.
 
-## 9. Тесты
+## 9. Tests
 
-xUnit, 87 тестов: загрузка всех лабиринтов, соответствие документации, сетка комнат, пули и стены, pod-комнаты, детерминизм,
-враги (появление, повторное появление, столкновение пуль, случайный окрас, плавный разворот робота, телепорт прыгуна),
-поворот танка и правило «сначала разворот, потом движение», вылет снаряда из дула, объекты (ключ и дверь, зелье,
-соответствие ключей и скважин), Shadow (появление, новый круг), граница лабиринта, God mode, посещённые комнаты,
-карта (раскладка из gif проверяется по данным), генератор (60 зёрен: структура и проходимость, воспроизводимость),
-сложность, векторные стены (покрытие всех границ), звук (конечность и диапазон амбиента и эффектов),
-пересчёт экранных направлений в оси комнаты (`CameraRig.ScreenToRoom`, top и iso),
-плита (`RoomFloor`: плюс у chamber, проход у коридора, fallback семени, замкнутость и осевые рёбра контура,
-склейка рёбер в длинные сегменты), зазор спавна (`RoomGrid.IsAreaFree`: стена на середине стороны, враги не в стенах),
-исчезновение скважины после открытия двери, конечность звука открытия стены (`Sfx.Keyhole`).
+xUnit, 88 tests: loading all mazes, documentation conformance, the room grid, bullets and walls, pod rooms, determinism,
+enemies (spawn, respawn, bullet collision, random coloring, smooth robot turning, jumper teleport),
+tank rotation and the "turn first, then move" rule, projectile spawning from the muzzle, items (key and door, potion,
+key-to-keyhole matching), Shadow (appearance, new cycle), the maze boundary, God mode, visited rooms,
+the map (layout from the gif is verified against the data), the generator (60 seeds: structure and passability, reproducibility),
+difficulty, walls without death (`WallsKill=false` blocks but does not kill), vector walls (coverage of all boundaries), sound (finiteness and range of the ambient and effects),
+conversion of screen directions to room axes (`CameraRig.ScreenToRoom`, top and iso),
+the plateau (`RoomFloor`: plus at a chamber, passage at a corridor, seed fallback, closure and axis-aligned boundary edges,
+merging edges into long segments), spawn clearance (`RoomGrid.IsAreaFree`: wall at the middle of a side, enemies not in walls),
+the keyhole disappearing after the door opens, finiteness of the wall-opening sound (`Sfx.Keyhole`).
 
-## 10. Как расширять
+## 10. How to Extend
 
-- **Новый звук:** добавить значение в `Sfx`, ветку в `ProceduralSfx.Create`, число вариантов в `VariantCount`, событие в `AudioManager.Handle`.
-- **Новое событие:** значение в `WorldEventKind`, `Events.Add` в `GameWorld`, обработка в `Hud.OnEvents` и/или `AudioManager.Handle`.
-- **Новый враг:** значение в `EnemyKind`, ветки в `GameWorld.Decide/UpdateEnemies`, отрисовка в `SceneRenderer.Draw`.
-- **Новая карта:** положить `NAME.maze` (640 байт) в `assets/mazes`, добавить имя в `GameApp.MazeOrder`, при желании `NAME.map` (формат в MAZE_FORMAT.md).
-- **Константы:** добавить свойство в `GameConfig` и в `assets/config.json`.
+- **New sound:** add a value to `Sfx`, a branch in `ProceduralSfx.Create`, the variant count in `VariantCount`, and an event in `AudioManager.Handle`.
+- **New event:** a value in `WorldEventKind`, `Events.Add` in `GameWorld`, handling in `Hud.OnEvents` and/or `AudioManager.Handle`.
+- **New enemy:** a value in `EnemyKind`, branches in `GameWorld.Decide/UpdateEnemies`, rendering in `SceneRenderer.Draw`.
+- **New map:** put `NAME.maze` (640 bytes) into `assets/mazes`, add the name to `GameApp.MazeOrder`, and optionally `NAME.map` (format in MAZE_FORMAT.md).
+- **Constants:** add a property to `GameConfig` and to `assets/config.json`.
