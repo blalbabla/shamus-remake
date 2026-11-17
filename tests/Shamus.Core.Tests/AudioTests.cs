@@ -42,7 +42,7 @@ public class AudioTests
     }
 
     [Theory]
-    [InlineData(Sfx.Shot)] [InlineData(Sfx.PlayerDie)] [InlineData(Sfx.GameOver)] [InlineData(Sfx.ShadowDie)] [InlineData(Sfx.NewLoop)] [InlineData(Sfx.Keyhole)]
+    [InlineData(Sfx.Shot)] [InlineData(Sfx.HitWall)] [InlineData(Sfx.EnemyShot)] [InlineData(Sfx.EnemyImpact)] [InlineData(Sfx.EnemyDie)] [InlineData(Sfx.PlayerDie)] [InlineData(Sfx.GameOver)] [InlineData(Sfx.ShadowDie)] [InlineData(Sfx.NewLoop)] [InlineData(Sfx.Keyhole)]
     public void SfxGeneratorsProduceFiniteSoundWithinRange(Sfx sfx)
     {
         for (int v = 0; v < ProceduralSfx.VariantCount(sfx); v++)

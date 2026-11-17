@@ -433,7 +433,7 @@ public sealed class GameWorld
             bool dead = b.X < 0 || b.X >= RoomGrid.W || b.Y < 0 || b.Y >= RoomGrid.H || Grid.IsSolid(cx, cy);
             float px = b.X - PlayerX, py = b.Y - PlayerY;
             if (!dead && px * px + py * py < 0.45f * 0.45f) { EnemyBullets.RemoveAt(i); Die(); return; }
-            if (dead) EnemyBullets.RemoveAt(i);
+            if (dead) { EnemyBullets.RemoveAt(i); Events.Add(new WorldEvent(WorldEventKind.EnemyImpact, b.X, b.Y)); }
         }
     }
 

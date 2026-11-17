@@ -1,6 +1,6 @@
 namespace Shamus.Game.Audio;
 
-public enum Sfx { Shot, HitWall, HitBarrier, BulletsClash, EnemyShot, EnemyDie, PlayerDie, GameOver, Key, Door, Potion, Bonus, PodOpen, ShadowWarn, ShadowAppear, ShadowDie, RoomEnter, NewLoop, Keyhole }
+public enum Sfx { Shot, HitWall, HitBarrier, BulletsClash, EnemyShot, EnemyDie, PlayerDie, GameOver, Key, Door, Potion, Bonus, PodOpen, ShadowWarn, ShadowAppear, ShadowDie, RoomEnter, NewLoop, Keyhole, EnemyImpact }
 
 /// <summary>All sounds are synthesised: one deterministic generator per effect, seeded by the variant index.</summary>
 public static class ProceduralSfx
@@ -19,14 +19,31 @@ public static class ProceduralSfx
         switch (sfx)
         {
             case Sfx.Shot:
-                b = Dsp.Buf(0.16f);
-                Dsp.AddSweep(b, 0, 0.14f, 1900 * j(0.1f), 340 * j(0.1f), 0.5f, 14, 1);
-                Dsp.AddSweep(b, 0, 0.14f, 950 * j(0.1f), 170, 0.25f, 14, 0);
+                b = Dsp.Buf(1.15f);
+                // launch: muzzle crack, deep boom, metallic breech
+                Dsp.AddNoise(b, rng, 0f, 0.12f, 16000, 4000, 1.0f, 55);
+                Dsp.AddSweep(b, 0f, 0.55f, 130 * j(0.05f), 34, 0.9f, 6, 2);
+                Dsp.AddSweep(b, 0f, 0.35f, 75, 38, 0.6f, 8);
+                Dsp.AddSweep(b, 0.005f, 0.10f, 3200 * j(0.1f), 700, 0.35f, 26, 1);
+                // the shell's burning fuel: a bright hiss with a low roar and a few crackles
+                Dsp.AddNoise(b, rng, 0.10f, 1.0f, 7000, 2500, 0.42f, 0.7f);
+                Dsp.AddNoise(b, rng, 0.10f, 0.85f, 1200, 300, 0.28f, 1.5f);
+                for (int k = 0; k < 6; k++)
+                {
+                    float t0 = 0.15f + k * 0.13f + (float)rng.NextDouble() * 0.05f;
+                    Dsp.AddNoise(b, rng, t0, 0.025f, 9000, 5000, 0.35f, 80);
+                }
                 break;
             case Sfx.HitWall:
-                b = Dsp.Buf(0.08f);
-                Dsp.AddNoise(b, rng, 0, 0.07f, 3500 * j(0.2f), 600, 0.9f, 55);
-                Dsp.AddSweep(b, 0, 0.05f, 220 * j(0.1f), 110, 0.3f, 40);
+                b = Dsp.Buf(0.95f);
+                // impact: sharp crack, explosion body, debris shards
+                Dsp.AddNoise(b, rng, 0f, 0.08f, 16000, 5000, 1.0f, 60);
+                Dsp.AddSweep(b, 0f, 0.65f, 120 * j(0.08f), 32, 1.0f, 5, 2);
+                Dsp.AddSweep(b, 0f, 0.5f, 70, 30, 0.7f, 6);
+                Dsp.AddNoise(b, rng, 0.02f, 0.8f, 5500, 800, 0.65f, 4.5f);
+                Dsp.AddNoise(b, rng, 0.05f, 0.7f, 1200, 250, 0.35f, 3);
+                for (int k = 0; k < 4; k++)
+                    Dsp.AddSweep(b, 0.03f + k * 0.04f, 0.08f, 2400 * j(0.2f), 900, 0.12f, 25, 1);
                 break;
             case Sfx.HitBarrier:
                 b = Dsp.Buf(0.35f);
@@ -38,13 +55,38 @@ public static class ProceduralSfx
                 Dsp.AddSweep(b, 0, 0.1f, 2400 * j(0.15f), 900, 0.3f, 25, 1);
                 break;
             case Sfx.EnemyShot:
-                b = Dsp.Buf(0.14f);
-                Dsp.AddSweep(b, 0, 0.12f, 300 * j(0.1f), 780 * j(0.1f), 0.35f, 12, 1);
+                b = Dsp.Buf(1.6f);
+                // launcher: servo click and magnetic thunk
+                Dsp.AddNoise(b, rng, 0f, 0.04f, 12000, 5000, 0.6f, 70);
+                Dsp.AddSweep(b, 0f, 0.10f, 220 * j(0.1f), 70, 0.5f, 25, 1);
+                // energy discharge
+                Dsp.AddSweep(b, 0.01f, 0.16f, 380 * j(0.1f), 1600 * j(0.1f), 0.45f, 10, 1);
+                Dsp.AddNoise(b, rng, 0.01f, 0.12f, 9000, 3000, 0.35f, 18);
+                // plasma bolt in flight: electric whine with vibrato, ion hiss and crackle
+                Dsp.AddSweep(b, 0.08f, 1.45f, 1350 * j(0.04f), 700, 0.16f, 1.1f, 0, 18);
+                Dsp.AddSweep(b, 0.08f, 1.35f, 675 * j(0.04f), 350, 0.08f, 1.2f, 1);
+                Dsp.AddNoise(b, rng, 0.08f, 1.2f, 6000, 1800, 0.16f, 1.6f);
+                for (int k = 0; k < 4; k++)
+                    Dsp.AddNoise(b, rng, 0.2f + k * 0.25f, 0.02f, 9000, 6000, 0.22f, 80);
+                break;
+            case Sfx.EnemyImpact:
+                b = Dsp.Buf(0.45f);
+                // plasma splash: zap, short ring, thud and sparks
+                Dsp.AddNoise(b, rng, 0f, 0.05f, 12000, 4000, 0.8f, 55);
+                Dsp.AddSweep(b, 0f, 0.18f, 1600 * j(0.15f), 260, 0.4f, 20, 1);
+                Dsp.AddBell(b, 0.01f, 1200 * j(0.1f), 0.25f, 18);
+                Dsp.AddSweep(b, 0f, 0.3f, 90 * j(0.1f), 45, 0.3f, 15);
+                Dsp.AddNoise(b, rng, 0.02f, 0.35f, 5000, 1200, 0.25f, 8);
                 break;
             case Sfx.EnemyDie:
-                b = Dsp.Buf(0.55f);
-                Dsp.AddNoise(b, rng, 0, 0.5f, 5000 * j(0.1f), 250, 1.0f, 7);
-                Dsp.AddSweep(b, 0, 0.4f, 260 * j(0.15f), 45, 0.7f, 6);
+                b = Dsp.Buf(0.8f);
+                // robot hit: crack, body explosion, debris and electrical sparks
+                Dsp.AddNoise(b, rng, 0f, 0.08f, 15000, 5000, 0.9f, 55);
+                Dsp.AddSweep(b, 0f, 0.5f, 180 * j(0.1f), 40, 0.8f, 6, 2);
+                Dsp.AddNoise(b, rng, 0.02f, 0.7f, 6000, 500, 0.6f, 5);
+                Dsp.AddSweep(b, 0f, 0.6f, 650 * j(0.1f), 90, 0.25f, 4, 1, 20);
+                for (int k = 0; k < 5; k++)
+                    Dsp.AddSweep(b, 0.05f + k * 0.05f, 0.04f, 3000 * j(0.2f), 1200, 0.12f, 30);
                 break;
             case Sfx.PlayerDie:
                 b = Dsp.Buf(1.0f);

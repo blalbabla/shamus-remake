@@ -102,6 +102,7 @@ public sealed class AudioManager : IDisposable
                 case WorldEventKind.BulletHitBarrier: Play(Sfx.HitBarrier); break;
                 case WorldEventKind.BulletsCancelled: Play(Sfx.BulletsClash); break;
                 case WorldEventKind.EnemyShot: Play(Sfx.EnemyShot); break;
+                case WorldEventKind.EnemyImpact: Play(Sfx.EnemyImpact); break;
                 case WorldEventKind.EnemyKilled: Play(Sfx.EnemyDie); break;
                 case WorldEventKind.PlayerDied: Play(Sfx.PlayerDie); break;
                 case WorldEventKind.GameOver: Play(Sfx.GameOver); break;
