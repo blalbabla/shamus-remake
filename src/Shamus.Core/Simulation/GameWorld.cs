@@ -467,10 +467,10 @@ public sealed class GameWorld
         if (InBarrier(PlayerX, ny + my * Config.PlayerRadius)) ny = PlayerY;
         PlayerX = nx; PlayerY = ny;
 
-        if (Config.WallsKill && PlayerHitsWall(PlayerX, PlayerY))
+        if (PlayerHitsWall(PlayerX, PlayerY))
         {
-            if (!Config.GodMode) { Die(); return; }
-            // god mode: walls still block, but do not kill; slide along them
+            if (Config.WallsKill && !Config.GodMode) { Die(); return; }
+            // walls still block, but do not kill (God Mode or "walls don't kill"): slide along them
             if (!PlayerHitsWall(nx, PrevPlayerY)) { PlayerX = nx; PlayerY = PrevPlayerY; }
             else if (!PlayerHitsWall(PrevPlayerX, ny)) { PlayerX = PrevPlayerX; PlayerY = ny; }
             else { PlayerX = PrevPlayerX; PlayerY = PrevPlayerY; }
@@ -480,7 +480,7 @@ public sealed class GameWorld
         else if (PlayerX < 0) EnterRoom(Room - 1, RoomGrid.W - 1.5f, PlayerY);
         else if (Corridor && PlayerY < 0) EnterRoom(Maze.VerticalLink(Room), PlayerX, RoomGrid.H - 1.5f);
         else if (Corridor && PlayerY >= RoomGrid.H) EnterRoom(Maze.VerticalLink(Room), PlayerX, 1.5f);
-        else if (!Corridor && (PlayerY < 0 || PlayerY >= RoomGrid.H)) { if (Config.GodMode) PlayerY = Math.Clamp(PlayerY, 0.5f, RoomGrid.H - 0.5f); else Die(); }
+        else if (!Corridor && (PlayerY < 0 || PlayerY >= RoomGrid.H)) { if (Config.GodMode || !Config.WallsKill) PlayerY = Math.Clamp(PlayerY, 0.5f, RoomGrid.H - 0.5f); else Die(); }
     }
 
     /// <summary>

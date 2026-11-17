@@ -91,5 +91,12 @@ public sealed class GameConfig
         return o.Deserialize<GameConfig>(Json)!;
     }
 
+    public GameConfig WithWallsKill(bool kill)
+    {
+        var o = JsonSerializer.SerializeToNode(this, Json)!.AsObject();
+        o["WallsKill"] = kill;
+        return o.Deserialize<GameConfig>(Json)!;
+    }
+
     public string ToJson() => JsonSerializer.Serialize(this, Json);
 }

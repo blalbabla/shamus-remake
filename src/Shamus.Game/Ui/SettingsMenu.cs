@@ -8,6 +8,7 @@ public sealed class SettingsRow
     public required Func<string> Label;
     public Func<bool>? Visible;   // dynamic rows (the seed shows only for procedural mazes)
     public bool Header;
+    public bool GapBefore;        // extra space above this row (separates BACK from the settings above)
     public Action<int>? Change;   // -1 / +1 (left/right)
     public Action? Activate;      // enter / space
 }
@@ -57,6 +58,7 @@ public sealed class SettingsMenu
         {
             var row = Rows[i];
             if (!(row.Visible?.Invoke() ?? true)) continue;
+            if (row.GapBefore) y += step / 2;
             if (row.Header)
             {
                 Hud.TextCentered(row.Label(), y + 6, headerSize, new Color(110, 150, 220, 255), screenW);

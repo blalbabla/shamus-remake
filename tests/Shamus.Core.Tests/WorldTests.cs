@@ -389,6 +389,16 @@ public class BoundaryAndGodTests
     }
 
     [Fact]
+    public void WallsDontKillStillBlocks()
+    {
+        var w = new GameWorld(Maze(), new GameConfig { WallsKill = false, StartLives = 3 }, 0);
+        w.Enemies.Clear();
+        for (int i = 0; i < 200; i++) w.Tick(new InputState(-1, 0, false));
+        Assert.Equal(3, w.Lives);
+        Assert.True(w.PlayerX >= 1.0f);
+    }
+
+    [Fact]
     public void GodModeWallsAndEnemiesDoNotKill()
     {
         var w = new GameWorld(Maze(), new GameConfig { GodMode = true, StartLives = 3 }, 0);

@@ -59,7 +59,7 @@ public sealed class GameApp
         return Path.Combine(AppContext.BaseDirectory, "assets", "config.json");
     }
 
-    private GameConfig BuildConfig() => GameConfig.Load(ConfigPath()).WithDifficulty(_settings.Difficulty).WithGodMode(_settings.GodMode);
+    private GameConfig BuildConfig() => GameConfig.Load(ConfigPath()).WithDifficulty(_settings.Difficulty).WithGodMode(_settings.GodMode).WithWallsKill(!_settings.WallsDontKill);
 
     private MazeData LoadMaze() =>
         _settings.Maze == "random" ? ProceduralMaze.Generate(_settings.Seed) : MazeLoader.Load(MazePath(_settings.Maze));
@@ -116,7 +116,13 @@ public sealed class GameApp
         });
         _settingsMenu.Rows.Add(new SettingsRow
         {
-            Label = () => "GOD MODE: " + (_settings.GodMode ? "ON (test)" : "OFF"),
+            Label = () => "WALLS DON'T KILL: " + (_settings.WallsDontKill ? "ON" : "OFF"),
+            Change = _ => ToggleWallsDontKill(),
+            Activate = ToggleWallsDontKill,
+        });
+        _settingsMenu.Rows.Add(new SettingsRow
+        {
+            Label = () => "GOD MODE: " + (_settings.GodMode ? "ON" : "OFF"),
             Change = _ => ToggleGodMode(),
             Activate = ToggleGodMode,
         });
@@ -149,7 +155,7 @@ public sealed class GameApp
             Activate = () => AdjustMusic(1),
         });
 
-        _settingsMenu.Rows.Add(new SettingsRow { Label = () => "BACK", Activate = CloseSettings });
+        _settingsMenu.Rows.Add(new SettingsRow { Label = () => "BACK", Activate = CloseSettings, GapBefore = true });
     }
 
     private void OpenSettings() { _settingsMenu.Reset(); _state = AppState.Settings; }
@@ -170,6 +176,7 @@ public sealed class GameApp
     }
 
     private void ToggleGodMode() { _settings.GodMode = !_settings.GodMode; _settings.Save(); }
+    private void ToggleWallsDontKill() { _settings.WallsDontKill = !_settings.WallsDontKill; _settings.Save(); }
 
     private void AdjustEffects(int d)
     {
