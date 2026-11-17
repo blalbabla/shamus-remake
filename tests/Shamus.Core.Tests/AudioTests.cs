@@ -29,6 +29,18 @@ public class AudioTests
         Assert.NotEqual(x, y);
     }
 
+    [Fact]
+    public void MusicGeneratorProducesAudibleSamples()
+    {
+        var synth = new AmbientSynth(1);
+        synth.TensionTarget = 0.5f;
+        synth.MuffleTarget = 0f;
+        var buf = new short[AmbientSynth.Rate * 2];
+        synth.Render(buf, AmbientSynth.Rate);
+        int peak = buf.Max(s => Math.Abs((int)s));
+        Assert.InRange(peak, 1000, 32767);
+    }
+
     [Theory]
     [InlineData(Sfx.Shot)] [InlineData(Sfx.PlayerDie)] [InlineData(Sfx.GameOver)] [InlineData(Sfx.ShadowDie)] [InlineData(Sfx.NewLoop)] [InlineData(Sfx.Keyhole)]
     public void SfxGeneratorsProduceFiniteSoundWithinRange(Sfx sfx)

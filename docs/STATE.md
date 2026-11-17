@@ -29,7 +29,7 @@ Shadow, процедурные лабиринты. Вид сверху или и
 git clone https://github.com/blalbabla/shamus-remake.git
 cd shamus-remake
 dotnet build          # решение Shamus.sln
-dotnet test           # 82 теста ядра
+dotnet test           # 83 теста ядра
 dotnet run --project src/Shamus.Game
 ```
 
@@ -92,7 +92,7 @@ src/Shamus.Game/                 Raylib-фронтенд (~2.6k строк)
   Audio/                         Dsp, ProceduralSfx, AmbientSynth, AudioManager
 tools/Shamus.MazeExtract/        ATR -> .maze
 tools/Shamus.RoomCompare/        сверка RoomGrid со скриншотами
-tests/Shamus.Core.Tests/         xUnit, 82 теста
+tests/Shamus.Core.Tests/         xUnit, 83 теста
 assets/                          mazes/*.maze, maps/*.map, config.json, fonts
 docs/                            DESIGN.md, TECHNICAL.md, MAZE_FORMAT.md, этот файл
 artifacts/                       исходники и скриншоты; в .gitignore, на новой машине отсутствует
@@ -125,9 +125,9 @@ artifacts/                       исходники и скриншоты; в .g
 - **Ввод:** клавиатура и геймпад (`Ui/GameInput.cs`): левый стик/D-pad — движение и меню, A —
   подтверждение в меню и огонь, B — назад (в игре — пауза), View — карта. Клавиатура работает
   параллельно и в изометрии двигает по осям комнаты, как до геймпада.
-- **Звук:** 19 процедурных эффектов (2–5 вариантов), живой эмбиент, отдельные громкости эффектов/музыки.
+- **Звук:** 19 процедурных эффектов (2–5 вариантов), живой электронный эмбиент, отдельные громкости эффектов/музыки.
   (Переработка звука под новые события — ещё впереди.)
-- **Инструменты/тесты:** извлечение карт из ATR, сверка комнат со скриншотами, 82 xUnit-теста.
+- **Инструменты/тесты:** извлечение карт из ATR, сверка комнат со скриншотами, 83 xUnit-теста.
 
 ## 5. Как устроен кадр (важно при правках рендера)
 
@@ -336,7 +336,7 @@ dotnet build Shamus.sln
 dotnet test Shamus.sln --no-build
 ```
 
-Ожидаемо: 0 ошибок, 0 предупреждений, 82/82 теста. Для визуальной проверки:
+Ожидаемо: 0 ошибок, 0 предупреждений, 83/83 теста. Для визуальной проверки:
 
 ```bash
 dotnet run --project src/Shamus.Game -- --maze c64 --room 3 --view iso --mute --shot shot.png
